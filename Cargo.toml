@@ -1,0 +1,26 @@
+[package]
+name = "egui-fltk-frontend"
+version = "0.1.0"
+edition = "2018"
+authors = ["Ar37-rs <adyaro37@gmail.com>"]
+description = "FLTK frontend for Egui WGPU backend"
+documentation = "https://docs.rs/egui-fltk-frontend"
+readme = "README.md"
+keywords = ["GUI", "egui", "fltk", "wgpu"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Ar37-rs/egui-fltk-frontend"
+resolver = "2"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = "0.4"
+egui = "0.14"
+egui_wgpu_backend = "0.13"
+fltk = { version = "1.2", features = ["raw-window-handle"] }
+
+[features]
+fltk-bundled = ["fltk/fltk-bundled"]
+
+[dev-dependencies]
+egui_demo_lib = "0.14"
+pollster = "0.2"
