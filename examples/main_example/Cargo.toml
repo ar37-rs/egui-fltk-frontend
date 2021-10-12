@@ -13,5 +13,6 @@ resolver = "2"
 egui_demo_lib = "0.14"
 egui_wgpu_backend = "0.13"
 # with fltk-bundled features work on windows, linux and mac x64 only
-egui-fltk-frontend = { path = "../../../egui-fltk-frontend", features = ["fltk-bundled"]}
+# egui-fltk-frontend = { path = "../../../egui-fltk-frontend", features = ["fltk-bundled"] }
+egui-fltk-frontend = "0.1"
 pollster = "0.2"
