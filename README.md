@@ -1,6 +1,6 @@
 # Egui FLTK Frontend
 
-[![Crates.io](https://img.shields.io/crates/v/fe-image-widget.svg)](https://crates.io/crates/egui-fltk-frontend)
+[![Crates.io](https://img.shields.io/crates/v/egui-fltk-frontend.svg)](https://crates.io/crates/egui-fltk-frontend)
 [![Documentation](https://docs.rs/egui-fltk-frontend/badge.svg)](https://docs.rs/egui-fltk-frontend)
 [![CI](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml)
 
