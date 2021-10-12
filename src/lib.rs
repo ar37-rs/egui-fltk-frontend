@@ -20,6 +20,7 @@ pub fn begin_with(
     surface_config: wgpu::SurfaceConfiguration,
     scale: DpiScaling,
 ) -> (Painter, EguiState) {
+    app::set_screen_scale(window.screen_num(), 1.0);
     let scale = match scale {
         DpiScaling::Default => window.pixels_per_unit(),
         DpiScaling::Custom(custom) => custom,
