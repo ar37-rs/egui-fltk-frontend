@@ -11,7 +11,7 @@ pub use fltk;
 use std::{iter, num::NonZeroU32, sync::Arc, time::Instant};
 
 /// Construct the frontend.
-/// 
+///
 /// DpiScaling can be Default or Custom(f32)
 pub fn begin_with(
     window: &mut fltk::window::Window,

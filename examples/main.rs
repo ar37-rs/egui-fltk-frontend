@@ -23,7 +23,9 @@ use std::{sync::Arc, time::Instant};
 
 fn main() {
     let a = app::App::default();
-    let mut window = window::Window::default().with_size(600, 800);
+    let mut window = window::Window::default()
+        .with_size(600, 800)
+        .center_screen();
     window.set_label("hello");
     window.make_resizable(true);
     window.end();
