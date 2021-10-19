@@ -83,14 +83,13 @@ impl Painter {
         texture: Arc<egui::Texture>,
     ) {
         let surface = &self.surface;
-        let surface_config = &mut self.surface_config;
         let render_pass = &mut self.render_pass;
         let width = state.physical_width;
         let height = state.physical_height;
         {
-            surface_config.width = width;
-            surface_config.height = height;
-            surface.configure(&device, &surface_config);
+            self.surface_config.width = width;
+            self.surface_config.height = height;
+            surface.configure(&device, &self.surface_config);
         }
 
         // Upload all resources for the GPU.
