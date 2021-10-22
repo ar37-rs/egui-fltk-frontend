@@ -112,7 +112,7 @@ fn main() {
     let start_time = Instant::now();
     let mut app_output = AppOutput::default();
 
-    // Redraw window while being resized (requires on windows platform).
+    // Redraw window while being resized (required on windows platform).
     window.draw({
         let repaint_signal = repaint_signal.clone();
         let state = state.clone();
@@ -168,7 +168,6 @@ fn main() {
                             clipped_mesh,
                             texture,
                         );
-                        app::awake()
                     }
                 }
             }

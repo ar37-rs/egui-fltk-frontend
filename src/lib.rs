@@ -1,5 +1,5 @@
-use crate::egui::{CursorIcon, TextureId, Vec2};
-use crate::fltk::{
+use egui::{CursorIcon, TextureId, Vec2};
+use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, InputExt, WidgetExt, WindowExt},
@@ -476,7 +476,7 @@ pub fn translate_cursor(
     }
 }
 
-pub trait ImgWidgetConvert<I> {
+pub trait ImgWidgetConvert {
     /// Convert fltk Image to Egui Image Widget.
     ///
     /// label: Debug label of the texture. This will show up in graphics debuggers for easy identification.
@@ -489,7 +489,10 @@ pub trait ImgWidgetConvert<I> {
     ) -> Result<ImgWidget, FltkError>;
 }
 
-impl<I: ImageExt> ImgWidgetConvert<I> for I {
+impl<I> ImgWidgetConvert for I
+where
+    I: ImageExt,
+{
     fn to_img_widget(
         self,
         painter: &mut Painter,
