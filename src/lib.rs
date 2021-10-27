@@ -4,7 +4,7 @@ use fltk::{
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, InputExt, WidgetExt, WindowExt},
 };
-use chrono::Timelike;
+
 pub use egui;
 use egui_wgpu_backend::{epi::RepaintSignal, wgpu, RenderPass, ScreenDescriptor};
 pub use fltk;
@@ -63,7 +63,6 @@ impl Default for Signal {
 
 impl RepaintSignal for Signal {
     fn request_repaint(&self) {
-        ()
     }
 }
 
@@ -131,23 +130,17 @@ impl Painter {
 
         // Submit the commands.
         queue.submit(iter::once(encoder.finish()));
-        output_frame.present();
+        output_frame.present()
     }
 }
 
-/// Time of day as seconds since midnight. Used for clock in demo app.
-pub fn get_seconds_since_midnight() -> f64 {
-    let time = chrono::Local::now().time();
-    time.num_seconds_from_midnight() as f64 + 1e-9 * (time.nanosecond() as f64)
-}
 
-/// Frame time for FPS.
+/// Frame time for CPU usage.
 pub fn get_frame_time(start_time: Instant) -> f32 {
     (Instant::now() - start_time).as_secs_f64() as f32
 }
 
 /// The scaling factors of the app
-#[allow(dead_code)]
 pub enum DpiScaling {
     /// Default DPI Scale by fltk, usually 1.0
     Default,
@@ -574,7 +567,7 @@ impl ImgWidget {
 
     pub fn resize(&mut self, x: f32, y: f32) {
         self._size.x = x;
-        self._size.y = y
+        self._size.y = y;
     }
 
     pub fn set_size_x(&mut self, x: f32) {
@@ -582,7 +575,7 @@ impl ImgWidget {
     }
 
     pub fn set_size_y(&mut self, y: f32) {
-        self._size.y = y
+        self._size.y = y;
     }
 
     pub fn get_size_x(&self) -> f32 {

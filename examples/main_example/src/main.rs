@@ -16,7 +16,7 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, get_seconds_since_midnight, DpiScaling, Signal,
+    get_frame_time, DpiScaling, Signal,
 };
 use std::{cell::RefCell, rc::Rc};
 use std::{sync::Arc, time::Instant};
@@ -110,7 +110,7 @@ fn main() {
     let egui_ctx = Rc::new(RefCell::new(CtxRef::default()));
     let repaint_signal = Arc::new(Signal::default());
     let start_time = Instant::now();
-    let mut app_output = AppOutput::default();
+    let app_output = Rc::new(RefCell::new(AppOutput::default()));
 
     // Redraw window while being resized (required on windows platform).
     window.draw({
@@ -121,6 +121,7 @@ fn main() {
         let device = device.clone();
         let queue = queue.clone();
         let demo_app = demo_app.clone();
+        let app_output = app_output.clone();
         move |window| {
             // And here also using "if let ..." for safety.
             if let Ok(mut state) = state.try_borrow_mut() {
@@ -130,17 +131,17 @@ fn main() {
                         let mut egui_ctx = egui_ctx.borrow_mut();
                         let mut device = device.borrow_mut();
                         let mut queue = queue.borrow_mut();
+                        let mut app_output = app_output.borrow_mut();
                         {
                             // Begin frame
                             let frame_time = get_frame_time(start_time);
-                            let seconds_since_midnight = get_seconds_since_midnight();
                             let mut frame = FrameBuilder {
                                 info: IntegrationInfo {
                                     web_info: None,
                                     cpu_usage: Some(frame_time),
-                                    seconds_since_midnight: Some(seconds_since_midnight),
                                     native_pixels_per_point: Some(state.pixels_per_point),
                                     prefer_dark_mode: None,
+                                    name: "egui_glow",
                                 },
                                 tex_allocator: &mut painter.render_pass,
                                 output: &mut app_output,
@@ -180,17 +181,17 @@ fn main() {
         let mut egui_ctx = egui_ctx.borrow_mut();
         let mut device = device.borrow_mut();
         let mut queue = queue.borrow_mut();
+        let mut app_output = app_output.borrow_mut();
         {
             // Begin frame
             let frame_time = get_frame_time(start_time);
-            let seconds_since_midnight = get_seconds_since_midnight();
             let mut frame = FrameBuilder {
                 info: IntegrationInfo {
                     web_info: None,
                     cpu_usage: Some(frame_time),
-                    seconds_since_midnight: Some(seconds_since_midnight),
                     native_pixels_per_point: Some(state.pixels_per_point),
                     prefer_dark_mode: None,
+                    name: ""
                 },
                 tex_allocator: &mut painter.render_pass,
                 output: &mut app_output,
