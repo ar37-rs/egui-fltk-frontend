@@ -141,7 +141,7 @@ fn main() {
                                     cpu_usage: Some(frame_time),
                                     native_pixels_per_point: Some(state.pixels_per_point),
                                     prefer_dark_mode: None,
-                                    name: "egui_glow",
+                                    name: "egui + fltk + wgpu-backend",
                                 },
                                 tex_allocator: &mut painter.render_pass,
                                 output: &mut app_output,
@@ -191,7 +191,7 @@ fn main() {
                     cpu_usage: Some(frame_time),
                     native_pixels_per_point: Some(state.pixels_per_point),
                     prefer_dark_mode: None,
-                    name: "egui + fltk + wgpu-backend"
+                    name: "egui + fltk + wgpu-backend",
                 },
                 tex_allocator: &mut painter.render_pass,
                 output: &mut app_output,
