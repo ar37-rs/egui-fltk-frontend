@@ -13,7 +13,7 @@ resolver = "2"
 # with fltk-bundled features work on windows, linux and mac x64 only
 # egui-fltk-frontend = { path = "../../../egui-fltk-frontend", features = ["fltk-bundled"] }
 # On x11
-# egui-fltk-frontend = { path = "../../../egui-fltk-frontend", version = "0.3", default-features=false, features = ["clipboard-x11"] }
+# egui-fltk-frontend = { version = "0.3", default-features=false, features = ["clipboard-x11"] }
 egui-fltk-frontend = "0.3"
 egui_demo_lib = "0.15"
 egui_wgpu_backend = "0.14"
