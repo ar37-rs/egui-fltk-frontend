@@ -2,14 +2,15 @@ use egui::{CursorIcon, TextureId, Vec2};
 use fltk::{
     app,
     enums::{self, Cursor},
-    prelude::{FltkError, ImageExt, InputExt, WidgetExt, WindowExt},
+    prelude::{FltkError, ImageExt, WidgetExt, WindowExt},
 };
 
 pub use egui;
 use egui_wgpu_backend::{epi::RepaintSignal, wgpu, RenderPass, ScreenDescriptor};
 pub use fltk;
 use std::{iter, num::NonZeroU32, sync::Arc, time::Instant};
-
+mod clipboard;
+use clipboard::Clipboard;
 /// Construct the frontend.
 ///
 /// DpiScaling can be Default or Custom(f32)
@@ -49,6 +50,7 @@ pub fn begin_with(
         physical_height: y as u32,
         pixels_per_point: scale,
         screen_rect,
+        clipboard: clipboard::Clipboard::default(),
     };
     (painter, state)
 }
@@ -62,8 +64,7 @@ impl Default for Signal {
 }
 
 impl RepaintSignal for Signal {
-    fn request_repaint(&self) {
-    }
+    fn request_repaint(&self) {}
 }
 
 pub struct Painter {
@@ -81,31 +82,24 @@ impl Painter {
         clipped_mesh: Vec<egui::ClippedMesh>,
         texture: Arc<egui::Texture>,
     ) {
-        let surface = &self.surface;
-        let render_pass = &mut self.render_pass;
-        let width = state.physical_width;
-        let height = state.physical_height;
-        {
-            self.surface_config.width = width;
-            self.surface_config.height = height;
-            surface.configure(&device, &self.surface_config);
-        }
-
         // Upload all resources for the GPU.
         let screen_descriptor;
         {
+            let surface_config = &mut self.surface_config;
+            let width = state.physical_width;
+            let height = state.physical_height;
+            surface_config.width = width;
+            surface_config.height = height;
+            self.surface.configure(&device, surface_config);
             screen_descriptor = ScreenDescriptor {
                 physical_width: width,
                 physical_height: height,
                 scale_factor: state.pixels_per_point,
-            };
-            render_pass.update_texture(&device, &queue, &texture);
-            render_pass.update_user_textures(&device, &queue);
-            render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
-        }
+            }
+        };
 
         // Record all render passes.
-        let output_frame = match surface.get_current_texture() {
+        let output_frame = match self.surface.get_current_texture() {
             Ok(frame) => frame,
             Err(e) => {
                 eprintln!("Dropped frame with error: {}", e);
@@ -118,6 +112,10 @@ impl Painter {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("encoder"),
         });
+        let render_pass = &mut self.render_pass;
+        render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
+        render_pass.update_texture(&device, &queue, &texture);
+        render_pass.update_user_textures(&device, &queue);
         render_pass
             .execute(
                 &mut encoder,
@@ -127,13 +125,11 @@ impl Painter {
                 Some(wgpu::Color::BLACK),
             )
             .unwrap();
-
         // Submit the commands.
         queue.submit(iter::once(encoder.finish()));
-        output_frame.present()
+        output_frame.present();
     }
 }
-
 
 /// Frame time for CPU usage.
 pub fn get_frame_time(start_time: Instant) -> f32 {
@@ -144,7 +140,7 @@ pub fn get_frame_time(start_time: Instant) -> f32 {
 pub enum DpiScaling {
     /// Default DPI Scale by fltk, usually 1.0
     Default,
-    /// Custome DPI scaling, e.g: 1.5, 2.0 and so fort.
+    /// Custome DPI scaling, e.g: 0.8, 1.5, 2.0 and so fort.
     Custom(f32),
 }
 
@@ -179,6 +175,7 @@ pub struct EguiState {
     pub physical_height: u32,
     pub pixels_per_point: f32,
     pub screen_rect: egui::Rect,
+    pub clipboard: Clipboard,
 }
 
 impl EguiState {
@@ -187,7 +184,6 @@ impl EguiState {
         input_to_egui(win, event, self);
     }
 
-    // todo
     pub fn window_resized(&mut self) -> bool {
         let tmp = self._window_resized;
         self._window_resized = false;
@@ -196,8 +192,9 @@ impl EguiState {
 
     /// Convenience method for outputting what egui emits each frame
     pub fn fuse_output(&mut self, win: &mut fltk::window::Window, egui_output: &egui::Output) {
-        if !egui_output.copied_text.is_empty() {
-            app::copy(&egui_output.copied_text);
+        let copied_text = &egui_output.copied_text;
+        if !copied_text.is_empty() {
+            self.clipboard.set(copied_text.into());
         }
         translate_cursor(win, &mut self.fuse_cursor, egui_output.cursor_icon);
     }
@@ -208,7 +205,6 @@ impl EguiState {
         self.screen_rect = egui::Rect::from_min_size(Default::default(), rect);
     }
 
-    #[allow(dead_code)]
     pub fn update_screen_rect_size(&mut self, size: egui::Vec2) {
         self.screen_rect =
             egui::Rect::from_min_size(Default::default(), size * self.pixels_per_point);
@@ -217,16 +213,15 @@ impl EguiState {
 
 /// Handles input/events from FLTK
 pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state: &mut EguiState) {
-    let inp = fltk::input::Input::default();
     let (x, y) = app::event_coords();
     let pixels_per_point = state.pixels_per_point;
     match event {
         enums::Event::Resize => {
-            let x = win.width();
-            let y = win.height();
-            state.physical_width = x as u32;
-            state.physical_height = y as u32;
-            state.update_screen_rect(x, y);
+            let width = win.width();
+            let height = win.height();
+            state.physical_width = width as u32;
+            state.physical_height = height as u32;
+            state.update_screen_rect(width, height);
             state.input.screen_rect = Some(state.screen_rect);
             state._window_resized = true;
         }
@@ -244,7 +239,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     button: pressed,
                     pressed: true,
                     modifiers: state.modifiers,
-                })
+                });
             }
         }
 
@@ -263,7 +258,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     button: released,
                     pressed: false,
                     modifiers: state.modifiers,
-                })
+                });
             }
         }
 
@@ -273,7 +268,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
             state
                 .input
                 .events
-                .push(egui::Event::PointerMoved(state.pointer_pos))
+                .push(egui::Event::PointerMoved(state.pointer_pos));
         }
 
         enums::Event::KeyUp => {
@@ -288,10 +283,11 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     //TOD: Test on both windows and mac
                     command: (keymod & enums::EventState::Command == enums::EventState::Command),
                 };
-                if state.modifiers.command && key == egui::Key::V {
-                    app::paste(&inp);
-                    state.input.events.push(egui::Event::Text(inp.value()));
-                }
+                state.input.events.push(egui::Event::Key {
+                    key,
+                    pressed: false,
+                    modifiers: state.modifiers,
+                });
             }
         }
 
@@ -316,30 +312,28 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     command: (keymod & enums::EventState::Command == enums::EventState::Command),
                 };
 
-                state.input.events.push(egui::Event::Key {
-                    key,
-                    pressed: true,
-                    modifiers: state.modifiers,
-                });
-
                 if state.modifiers.command && key == egui::Key::C {
                     // println!("copy event");
-                    state.input.events.push(egui::Event::Copy)
+                    state.input.events.push(egui::Event::Copy);
                 } else if state.modifiers.command && key == egui::Key::X {
                     // println!("cut event");
-                    state.input.events.push(egui::Event::Cut)
+                    state.input.events.push(egui::Event::Cut);
+                } else if state.modifiers.command && key == egui::Key::V {
+                    if let Some(value) = state.clipboard.get() {
+                        state.input.events.push(egui::Event::Text(value));
+                    }
                 } else {
                     state.input.events.push(egui::Event::Key {
                         key,
-                        pressed: false,
+                        pressed: true,
                         modifiers: state.modifiers,
-                    })
+                    });
                 }
             }
         }
 
         enums::Event::MouseWheel => {
-            if app::is_event_ctrl() {
+            if app::is_event_command() {
                 let zoom_factor = 1.2;
                 match app::event_dy() {
                     app::MouseWheel::Up => {
@@ -465,7 +459,7 @@ pub fn translate_cursor(
 
     if tmp_icon != fused.cursor_icon {
         fused.cursor_icon = tmp_icon;
-        win.set_cursor(tmp_icon)
+        win.set_cursor(tmp_icon);
     }
 }
 
@@ -644,5 +638,35 @@ impl ImgWidget {
         }
         let image = ImgWidget::new(texture_id, egui::vec2(width as f32, height as f32));
         Ok(image)
+    }
+}
+
+pub struct Timer {
+    timer: u32,
+    elapse: u32,
+    duration: f32,
+}
+
+impl Timer {
+    /// Elapse every, approximately in second(s).
+    pub fn new(elapse: u32) -> Self {
+		let _elapse = elapse * 180;
+        let duration = _elapse as f32 / 1000.0;
+        Self {
+            timer: 0,
+            elapse: elapse * 5,
+            duration,
+        }
+    }
+
+    /// Check if the timer is elapsed.
+    pub fn elapsed(&mut self) -> bool {
+        if self.timer >= self.elapse {
+            self.timer = 0;
+            return true;
+        }
+        self.timer += 1;
+        app::sleep(self.duration.into());
+        false
     }
 }

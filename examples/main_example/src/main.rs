@@ -16,22 +16,24 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, DpiScaling, Signal,
+    get_frame_time, DpiScaling, Signal, Timer,
 };
 use std::{cell::RefCell, rc::Rc};
 use std::{sync::Arc, time::Instant};
+
+const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
 
 fn main() {
     let a = app::App::default();
     let mut window = window::Window::default()
         .with_size(600, 800)
         .center_screen();
-    window.set_label("hello");
+    window.set_label("Demo Window");
     window.make_resizable(true);
     window.end();
     window.show();
     window.make_current();
-    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    let instance = wgpu::Instance::new(wgpu::Backends::DX12);
     let surface = unsafe { instance.create_surface(&window) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
@@ -87,7 +89,8 @@ fn main() {
             | Event::MouseWheel
             | Event::Resize
             | Event::Move
-            | Event::Drag => {
+            | Event::Drag
+            | Event::Focus => {
                 let mut handled = false;
                 // Using "if let ..." for safety.
                 if let Ok(mut state) = state.try_borrow_mut() {
@@ -141,7 +144,7 @@ fn main() {
                                     cpu_usage: Some(frame_time),
                                     native_pixels_per_point: Some(state.pixels_per_point),
                                     prefer_dark_mode: None,
-                                    name: "egui + fltk + wgpu-backend",
+                                    name: INTEGRATION_NAME,
                                 },
                                 tex_allocator: &mut painter.render_pass,
                                 output: &mut app_output,
@@ -175,6 +178,8 @@ fn main() {
         }
     });
 
+    let mut timer = Timer::new(1);
+
     while a.wait() {
         let mut state = state.borrow_mut();
         let mut painter = painter.borrow_mut();
@@ -191,7 +196,7 @@ fn main() {
                     cpu_usage: Some(frame_time),
                     native_pixels_per_point: Some(state.pixels_per_point),
                     prefer_dark_mode: None,
-                    name: "egui + fltk + wgpu-backend",
+                    name: INTEGRATION_NAME,
                 },
                 tex_allocator: &mut painter.render_pass,
                 output: &mut app_output,
@@ -215,15 +220,16 @@ fn main() {
 
         let window_resized = state.window_resized();
         if window_resized {
-            window.clear_damage()
+            window.clear_damage();
         }
 
-        if output.needs_repaint || window_resized {
+        // Make sure timer.elapsed() in the last order.
+        if output.needs_repaint || window_resized || timer.elapsed() {
             state.fuse_output(&mut window, &output);
             let clipped_mesh = egui_ctx.tessellate(shapes);
             let texture = egui_ctx.texture();
             painter.paint_jobs(&mut device, &mut queue, &mut state, clipped_mesh, texture);
-            app::awake()
         }
+        app::awake();
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 description = "FLTK frontend for Egui WGPU backend"
@@ -15,11 +15,29 @@ resolver = "2"
 [dependencies]
 egui = "0.15"
 egui_wgpu_backend = "0.14"
-fltk = { version = "1.2", features = ["raw-window-handle"] }
+fltk = { version = "1.2", features = ["raw-window-handle", "fltk-bundled"] }
+
+[target."cfg(windows)".dependencies.copypasta]
+version = "0.7"
+optional = true
+
+[target."cfg(all(unix, not(any(target_os=\"linux\", target_os=\"freebsd\"))))".dependencies.copypasta]
+version = "0.7"
+optional = true
+
+[target."cfg(all(unix, any(target_os=\"linux\", target_os=\"freebsd\")))".dependencies.copypasta]
+version = "0.7"
+optional = true
+default-features = false
 
 [features]
+default = ["clipboard-x11", "clipboard-wayland"]
+clipboard = ["copypasta"]
+clipboard-x11 = ["clipboard", "copypasta/x11"]
+clipboard-wayland = ["clipboard", "copypasta/wayland"]
 fltk-bundled = ["fltk/fltk-bundled"]
 
 [dev-dependencies]
 egui_demo_lib = "0.15"
 pollster = "0.2"
+asynchron = "*"
