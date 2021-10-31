@@ -311,7 +311,11 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     //TOD: Test on both windows and mac
                     command: (keymod & enums::EventState::Command == enums::EventState::Command),
                 };
-
+                state.input.events.push(egui::Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers: state.modifiers,
+                });
                 if state.modifiers.command && key == egui::Key::C {
                     // println!("copy event");
                     state.input.events.push(egui::Event::Copy);
@@ -322,12 +326,6 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     if let Some(value) = state.clipboard.get() {
                         state.input.events.push(egui::Event::Text(value));
                     }
-                } else {
-                    state.input.events.push(egui::Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers: state.modifiers,
-                    });
                 }
             }
         }
@@ -650,7 +648,7 @@ pub struct Timer {
 impl Timer {
     /// Elapse every, approximately in second(s).
     pub fn new(elapse: u32) -> Self {
-		let _elapse = elapse * 180;
+        let _elapse = elapse * 180;
         let duration = _elapse as f32 / 1000.0;
         Self {
             timer: 0,

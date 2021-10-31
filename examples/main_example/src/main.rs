@@ -33,7 +33,7 @@ fn main() {
     window.end();
     window.show();
     window.make_current();
-    let instance = wgpu::Instance::new(wgpu::Backends::DX12);
+    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
