@@ -26,7 +26,7 @@ Running examples/main.rs file:
 cargo run --example main
 ```
 
-To use clipboard functionality on X11 system run following command to avoid pulling unnecessary wayland dependecies:
+To use clipboard functionality on X11 system run following command to avoid pulling unnecessary wayland dependencies:
 
 ```
 cargo run --example main --no-default-features --features=clipboard-x11
