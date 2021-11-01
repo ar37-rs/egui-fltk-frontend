@@ -223,7 +223,7 @@ fn main() {
             window.clear_damage();
         }
 
-        // Make sure timer.elapsed() in the last order.
+        // Make sure to put timer.elapsed() on the last order.
         if output.needs_repaint || window_resized || state.mouse_btn_pressed() || timer.elapsed() {
             state.fuse_output(&mut window, &output);
             let clipped_mesh = egui_ctx.tessellate(shapes);
