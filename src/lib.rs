@@ -51,6 +51,7 @@ pub fn begin_with(
         pixels_per_point: scale,
         screen_rect,
         clipboard: clipboard::Clipboard::default(),
+        _mouse_btn_pressed: false,
     };
     (painter, state)
 }
@@ -176,6 +177,7 @@ pub struct EguiState {
     pub pixels_per_point: f32,
     pub screen_rect: egui::Rect,
     pub clipboard: Clipboard,
+    _mouse_btn_pressed: bool,
 }
 
 impl EguiState {
@@ -188,6 +190,10 @@ impl EguiState {
         let tmp = self._window_resized;
         self._window_resized = false;
         tmp
+    }
+
+    pub fn mouse_btn_pressed(&self) -> bool {
+        self._mouse_btn_pressed
     }
 
     /// Convenience method for outputting what egui emits each frame
@@ -234,6 +240,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                 _ => None,
             };
             if let Some(pressed) = mouse_btn {
+                state._mouse_btn_pressed = true;
                 state.input.events.push(egui::Event::PointerButton {
                     pos: state.pointer_pos,
                     button: pressed,
@@ -253,6 +260,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                 _ => None,
             };
             if let Some(released) = mouse_btn {
+                state._mouse_btn_pressed = false;
                 state.input.events.push(egui::Event::PointerButton {
                     pos: state.pointer_pos,
                     button: released,

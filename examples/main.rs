@@ -224,7 +224,7 @@ fn main() {
         }
 
         // Make sure timer.elapsed() in the last order.
-        if output.needs_repaint || window_resized || timer.elapsed() {
+        if output.needs_repaint || window_resized || state.mouse_btn_pressed() || timer.elapsed() {
             state.fuse_output(&mut window, &output);
             let clipped_mesh = egui_ctx.tessellate(shapes);
             let texture = egui_ctx.texture();
