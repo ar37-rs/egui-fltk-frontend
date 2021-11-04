@@ -52,7 +52,6 @@ impl Clipboard {
 
     #[cfg(feature = "clipboard")]
     pub fn set(&mut self, text: String) {
-        #[cfg(feature = "clipboard")]
         if let Some(clipboard) = &mut self.clipboard {
             use copypasta::ClipboardProvider as _;
             if let Err(err) = clipboard.set_contents(text) {

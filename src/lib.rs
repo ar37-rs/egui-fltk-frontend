@@ -4,13 +4,13 @@ use fltk::{
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WidgetExt, WindowExt},
 };
-
 pub use egui;
 use egui_wgpu_backend::{epi::RepaintSignal, wgpu, RenderPass, ScreenDescriptor};
 pub use fltk;
 use std::{iter, num::NonZeroU32, sync::Arc, time::Instant};
 mod clipboard;
 use clipboard::Clipboard;
+
 /// Construct the frontend.
 ///
 /// DpiScaling can be Default or Custom(f32)
