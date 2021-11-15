@@ -98,7 +98,6 @@ impl Painter {
                 scale_factor: state.pixels_per_point,
             }
         };
-
         // Record all render passes.
         let output_frame = match self.surface.get_current_texture() {
             Ok(frame) => frame,

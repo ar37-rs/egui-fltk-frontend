@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 description = "FLTK frontend for Egui WGPU backend"
@@ -31,7 +31,7 @@ optional = true
 default-features = false
 
 [features]
-default = ["clipboard-x11", "clipboard-wayland"]
+default = ["clipboard-x11"]
 clipboard = ["copypasta"]
 clipboard-x11 = ["clipboard", "copypasta/x11"]
 clipboard-wayland = ["clipboard", "copypasta/wayland"]
