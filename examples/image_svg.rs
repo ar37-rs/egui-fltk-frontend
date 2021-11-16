@@ -11,7 +11,6 @@ use egui_wgpu_backend as backend;
 use frontend::{
     egui::{self, CtxRef},
     fltk::{
-        self,
         app,
         enums::Event,
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
