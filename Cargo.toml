@@ -15,7 +15,7 @@ resolver = "2"
 [dependencies]
 egui = "0.15"
 egui_wgpu_backend = "0.14"
-fltk = { version = "1.2", features = ["raw-window-handle", "fltk-bundled"] }
+fltk = { version = "1.2", features = ["raw-window-handle"] }
 
 [target."cfg(windows)".dependencies.copypasta]
 version = "0.7"
