@@ -6,10 +6,10 @@
 
 [FLTK](https://github.com/fltk-rs/fltk-rs) Frontend for [Egui WGPU Backend](https://github.com/hasenbanck/egui_wgpu_backend)
 
-On linux Debian/Ubuntu based distros, install build tools (if not installed):
+On linux Debian/Ubuntu based distros, install latest build tools (if not installed):
 
 ```
-sudo apt install build-essential cmake ninja-build
+sudo apt-get update && sudo apt-get install build-essential cmake ninja-build
 ```
 
 And make sure to install the latest main requirements:
