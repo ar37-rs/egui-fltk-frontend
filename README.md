@@ -6,13 +6,19 @@
 
 [FLTK](https://github.com/fltk-rs/fltk-rs) Frontend for [Egui WGPU Backend](https://github.com/hasenbanck/egui_wgpu_backend)
 
-On linux Debian/Ubuntu based distros, make sure to install the latest main requirements:
+On linux Debian/Ubuntu based distros, install build tools (if not installed):
+
+```
+sudo apt install build-essential cmake ninja-build
+```
+
+And make sure to install the latest main requirements:
 
 ```
 sudo apt-get update && sudo apt-get install -y libpango1.0-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libgl1-mesa-dev libglu1-mesa-dev libmpv-dev
 ```
 
-Additional linux requirements:
+Additional requirements:
 
 ```
 sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
