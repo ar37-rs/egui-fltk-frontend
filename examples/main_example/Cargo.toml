@@ -10,7 +10,7 @@ publish = false
 resolver = "2"
 
 [dependencies]
-# With fltk-bundled features work on windows, linux and mac x64 only
+# With fltk-bundled features work on windows, linux and mac x64 only (requires curl and tar)
 # egui-fltk-frontend = { version = "0.3", features = ["fltk-bundled"] }
 egui-fltk-frontend = "0.3"
 egui_demo_lib = "0.15"
