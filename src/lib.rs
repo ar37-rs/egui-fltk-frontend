@@ -1,9 +1,6 @@
 pub use egui;
 use egui::{CursorIcon, TextureId, Vec2};
-use egui_wgpu_backend::{
-    epi::{self, RepaintSignal},
-    wgpu, RenderPass, ScreenDescriptor,
-};
+use egui_wgpu_backend::{epi, wgpu, RenderPass, ScreenDescriptor};
 pub use fltk;
 use fltk::{
     app,
@@ -78,7 +75,7 @@ impl Default for Signal {
     }
 }
 
-impl RepaintSignal for Signal {
+impl epi::RepaintSignal for Signal {
     fn request_repaint(&self) {}
 }
 
@@ -453,7 +450,7 @@ pub fn translate_virtual_key_code(key: enums::Key) -> Option<egui::Key> {
 pub fn translate_cursor(
     win: &mut fltk::window::Window,
     fused: &mut FusedCursor,
-    cursor_icon: egui::CursorIcon,
+    cursor_icon: CursorIcon,
 ) {
     let tmp_icon = match cursor_icon {
         CursorIcon::None => enums::Cursor::None,
@@ -482,6 +479,7 @@ pub fn translate_cursor(
     }
 }
 
+/// Low level converter for fltk::image
 pub trait ImgWidgetConvert {
     /// Convert fltk Image to Egui Image Widget.
     ///
@@ -563,6 +561,18 @@ pub struct ImgWidget {
 
 impl Drop for ImgWidget {
     fn drop(&mut self) {}
+}
+
+/// High level converter for fltk::image
+pub trait ImgWidgetExt {
+    /// Convert into ImgWidget
+    fn into_img_widget(self, frame: &mut epi::Frame<'_>) -> Option<ImgWidget>;
+}
+
+impl<I: ImageExt> ImgWidgetExt for I {
+    fn into_img_widget(self, frame: &mut epi::Frame<'_>) -> Option<ImgWidget> {
+        ImgWidget::from_fltk_image(self, frame)
+    }
 }
 
 impl ImgWidget {
@@ -684,7 +694,7 @@ impl ImgWidget {
 
     #[cfg(feature = "svg")]
     /// Using resvg, usvg and tiny-skia under the hood.
-    pub fn from_svg_bytes(
+    pub fn from_svg_data(
         bytes: &[u8],
         opt_ref: OptionsRef,
         frame: &mut epi::Frame<'_>,
@@ -785,32 +795,25 @@ impl ImgWidget {
     }
 }
 
-/// Compat for epi::App trait
+/// Compat for epi::App impl trait
 pub struct Compat {
     setup: bool,
 }
 
 impl Default for Compat {
     fn default() -> Self {
-        Self { setup: false }
+        Self { setup: true }
     }
 }
 
 impl Compat {
     /// Called once before the first frame.
-    pub fn setup<A: epi::App>(
-        &mut self,
-        app: &mut A,
-        ctx: &egui::CtxRef,
-        frame: &mut epi::Frame<'_>,
-        storage: Option<&dyn epi::Storage>,
-    ) {
+    pub fn needs_setup(&mut self) -> bool {
         if self.setup {
-            return;
-        } else {
-            app.setup(ctx, frame, storage);
-            self.setup = true;
+            self.setup = false;
+            return true;
         }
+        self.setup
     }
 }
 
@@ -827,7 +830,7 @@ impl Timer {
         let duration = _elapse as f32 / 1000.0;
         Self {
             timer: 0,
-            elapse: elapse * 5,
+            elapse: elapse * 6,
             duration,
         }
     }

@@ -21,13 +21,13 @@ use frontend::{
 use std::{cell::RefCell, io::Read, rc::Rc, sync::Arc, time::Instant};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
 
-struct ImageDemo {
+struct ImageSVGDemo {
     name: String,
     age: u32,
     image_widget: Option<ImgWidget>,
 }
 
-impl Default for ImageDemo {
+impl Default for ImageSVGDemo {
     fn default() -> Self {
         Self {
             name: "Arthur".to_owned(),
@@ -37,7 +37,7 @@ impl Default for ImageDemo {
     }
 }
 
-impl App for ImageDemo {
+impl App for ImageSVGDemo {
     fn name(&self) -> &str {
         "My egui App"
     }
@@ -75,17 +75,27 @@ impl App for ImageDemo {
         frame: &mut epi::Frame<'_>,
         _storage: Option<&dyn epi::Storage>,
     ) {
-        let opt = Options::default();
+        let mut svg_opt = Options::default();
+        svg_opt.fontdb.load_system_fonts();
         let mut buf = Vec::new();
-        match std::fs::File::open("examples/resources/fingerprint.svg")
-            .unwrap()
-            .read_to_end(&mut buf)
-        {
-            Err(e) => println!("{}", e.to_string()),
-            _ => {
-                self.image_widget =
-                    Some(ImgWidget::from_svg_bytes(&buf, opt.to_ref(), frame).unwrap())
+
+        let mut _file = match std::fs::File::open("examples/resources/fingerprint.svg") {
+            Ok(_file) => _file,
+            Err(e) => {
+                eprintln!("{}", e.to_string());
+                return;
             }
+        };
+
+        if let Err(e) = _file.read_to_end(&mut buf) {
+            eprintln!("{}", e.to_string());
+        } else {
+            match ImgWidget::from_svg_data(&buf, svg_opt.to_ref(), frame) {
+                Ok(image_widget) => self.image_widget = Some(image_widget),
+                Err(e) => {
+                    eprintln!("{}", e.to_string());
+                }
+            };
         }
     }
 }
@@ -95,7 +105,7 @@ fn main() {
     let mut window = window::Window::default()
         .with_size(600, 800)
         .center_screen();
-    window.set_label("Image Demo Window");
+    window.set_label("Image SVG Demo Window");
     window.make_resizable(true);
     window.end();
     window.show();
@@ -176,7 +186,7 @@ fn main() {
     let painter = Rc::new(RefCell::new(painter));
 
     // Display the demo application that ships with egui.
-    let image_svg_demo = Rc::new(RefCell::new(ImageDemo::default()));
+    let image_svg_demo = Rc::new(RefCell::new(ImageSVGDemo::default()));
     let egui_ctx = Rc::new(RefCell::new(CtxRef::default()));
     let repaint_signal = Arc::new(Signal::default());
     let start_time = Instant::now();
@@ -248,7 +258,7 @@ fn main() {
     // Use Timer for auto repaint if the app is idle.
     let mut timer = Timer::new(1);
 
-    // Use Compat for epi::App trait
+    // Use Compat (helper) for epi::App trait
     let mut compat = Compat::default();
 
     while a.wait() {
@@ -281,7 +291,9 @@ fn main() {
             // Draw the demo application.
             let mut image_svg_demo = image_svg_demo.borrow_mut();
             // Setup
-            compat.setup(&mut *image_svg_demo, &egui_ctx, &mut frame, None);
+            if compat.needs_setup() {
+                image_svg_demo.setup(&egui_ctx, &mut frame, None);
+            }
             // Update
             image_svg_demo.update(&egui_ctx, &mut frame);
         }

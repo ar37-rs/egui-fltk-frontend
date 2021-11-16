@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 description = "FLTK frontend for Egui WGPU backend"
@@ -15,7 +15,7 @@ resolver = "2"
 [dependencies]
 egui = "0.15"
 egui_wgpu_backend = "0.14"
-fltk = { version = "1.2", features = ["raw-window-handle"] }
+fltk = { version = "1.2", features = ["raw-window-handle", "fltk-bundled"] }
 
 [target."cfg(windows)".dependencies.copypasta]
 version = "0.7"

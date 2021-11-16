@@ -16,9 +16,9 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, Compat, DpiScaling, ImgWidget, Signal, Timer,
+    get_frame_time, Compat, DpiScaling, ImgWidget, ImgWidgetExt, Signal, Timer,
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
+use std::{cell::RefCell, io::Read, rc::Rc, sync::Arc, time::Instant};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
 
 struct ImageDemo {
@@ -75,11 +75,32 @@ impl App for ImageDemo {
         frame: &mut epi::Frame<'_>,
         _storage: Option<&dyn epi::Storage>,
     ) {
-        // Load fltk (jpg, png, bmp ...) image
-        match fltk::image::JpegImage::load("examples/resources/nature.jpg") {
-            Ok(fltk_image) => self.image_widget = ImgWidget::from_fltk_image(fltk_image, frame),
-            Err(e) => eprintln!("{}", e.to_string()),
+        // Load fltk (jpg, png, bmp ...) image accordingly.
+        let mut buf = Vec::new();
+        let mut _file = match std::fs::File::open("examples/resources/nature.jpg") {
+            Ok(_file) => _file,
+            Err(e) => {
+                eprintln!("{}", e.to_string());
+                return;
+            }
+        };
+
+        if let Err(e) = _file.read_to_end(&mut buf) {
+            eprintln!("{}", e.to_string());
+        } else {
+            match fltk::image::JpegImage::from_data(&buf) {
+                Ok(fltk_image) => self.image_widget = fltk_image.into_img_widget(frame),
+                Err(e) => {
+                    eprintln!("{}", e.to_string());
+                }
+            };
         }
+
+        // // Or simply
+        // match fltk::image::JpegImage::load("examples/resources/nature.jpg") {
+        //     Ok(fltk_image) => self.image_widget = ImgWidget::from_fltk_image(fltk_image, frame),
+        //     Err(e) => eprintln!("{}", e.to_string()),
+        // }
     }
 }
 
@@ -274,7 +295,9 @@ fn main() {
             // Draw the demo application.
             let mut image_demo = image_demo.borrow_mut();
             // Setup
-            compat.setup(&mut *image_demo, &egui_ctx, &mut frame, None);
+            if compat.needs_setup() {
+                image_demo.setup(&egui_ctx, &mut frame, None);
+            }
             // Update
             image_demo.update(&egui_ctx, &mut frame);
         }
