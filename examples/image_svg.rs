@@ -1,32 +1,101 @@
 use backend::{
     epi::{
+        self,
         backend::{AppOutput, FrameBuilder},
         App, IntegrationInfo,
     },
     wgpu,
 };
-use egui_demo_lib::WrapApp;
 use egui_fltk_frontend as frontend;
 use egui_wgpu_backend as backend;
 use frontend::{
-    egui::CtxRef,
+    egui::{self, CtxRef},
     fltk::{
         app,
         enums::Event,
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, DpiScaling, Signal, Timer,
+    get_frame_time, Compat, DpiScaling, ImgWidget, Options, Signal, Timer,
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
+use std::{cell::RefCell, io::Read, rc::Rc, sync::Arc, time::Instant};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
+
+struct ImageDemo {
+    name: String,
+    age: u32,
+    image_widget: Option<ImgWidget>,
+}
+
+impl Default for ImageDemo {
+    fn default() -> Self {
+        Self {
+            name: "Arthur".to_owned(),
+            age: 24,
+            image_widget: None,
+        }
+    }
+}
+
+impl App for ImageDemo {
+    fn name(&self) -> &str {
+        "My egui App"
+    }
+
+    fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
+        let Self {
+            name,
+            age,
+            image_widget,
+        } = self;
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("My egui Application");
+            ui.horizontal(|ui| {
+                ui.label("Your name: ");
+                ui.text_edit_singleline(name);
+            });
+            ui.add(egui::Slider::new(age, 0..=120).text("age"));
+            if ui.button("Click each year").clicked() {
+                *age += 1;
+            }
+            if let Some(image) = image_widget {
+                ui.add(image.widget());
+            }
+            ui.label(format!("Hello '{}', age {}", name, age));
+        });
+
+        // Resize the native window to be just the size we need it to be:
+        frame.set_window_size(ctx.used_size());
+    }
+
+    fn setup(
+        &mut self,
+        _ctx: &egui::CtxRef,
+        frame: &mut epi::Frame<'_>,
+        _storage: Option<&dyn epi::Storage>,
+    ) {
+        let opt = Options::default();
+        let mut buf = Vec::new();
+        match std::fs::File::open("examples/resources/fingerprint.svg")
+            .unwrap()
+            .read_to_end(&mut buf)
+        {
+            Err(e) => println!("{}", e.to_string()),
+            _ => {
+                self.image_widget =
+                    Some(ImgWidget::from_svg_bytes(&buf, opt.to_ref(), frame).unwrap())
+            }
+        }
+    }
+}
 
 fn main() {
     let a = app::App::default();
     let mut window = window::Window::default()
         .with_size(600, 800)
         .center_screen();
-    window.set_label("Demo Window");
+    window.set_label("Image Demo Window");
     window.make_resizable(true);
     window.end();
     window.show();
@@ -107,7 +176,7 @@ fn main() {
     let painter = Rc::new(RefCell::new(painter));
 
     // Display the demo application that ships with egui.
-    let demo_app = Rc::new(RefCell::new(WrapApp::default()));
+    let image_svg_demo = Rc::new(RefCell::new(ImageDemo::default()));
     let egui_ctx = Rc::new(RefCell::new(CtxRef::default()));
     let repaint_signal = Arc::new(Signal::default());
     let start_time = Instant::now();
@@ -121,7 +190,7 @@ fn main() {
         let egui_ctx = egui_ctx.clone();
         let device = device.clone();
         let queue = queue.clone();
-        let demo_app = demo_app.clone();
+        let image_svg_demo = image_svg_demo.clone();
         let app_output = app_output.clone();
         move |window| {
             // And here also using "if let ..." for safety.
@@ -154,8 +223,8 @@ fn main() {
                             egui_ctx.begin_frame(state.input.take());
 
                             // Draw the demo application.
-                            let mut demo_app = demo_app.borrow_mut();
-                            demo_app.update(&egui_ctx, &mut frame);
+                            let mut image_svg_demo = image_svg_demo.borrow_mut();
+                            image_svg_demo.update(&egui_ctx, &mut frame);
                         }
 
                         // End the UI frame. We could now handle the output and draw the UI with the backend.
@@ -178,6 +247,9 @@ fn main() {
 
     // Use Timer for auto repaint if the app is idle.
     let mut timer = Timer::new(1);
+
+    // Use Compat for epi::App trait
+    let mut compat = Compat::default();
 
     while a.wait() {
         let mut state = state.borrow_mut();
@@ -207,8 +279,11 @@ fn main() {
             egui_ctx.begin_frame(state.input.take());
 
             // Draw the demo application.
-            let mut demo_app = demo_app.borrow_mut();
-            demo_app.update(&egui_ctx, &mut frame);
+            let mut image_svg_demo = image_svg_demo.borrow_mut();
+            // Setup
+            compat.setup(&mut *image_svg_demo, &egui_ctx, &mut frame, None);
+            // Update
+            image_svg_demo.update(&egui_ctx, &mut frame);
         }
 
         // End the UI frame. We could now handle the output and draw the UI with the backend.
@@ -222,7 +297,7 @@ fn main() {
             window.clear_damage();
         }
 
-        // Make sure to put timer.elapsed() on the last order.
+        // Make sure timer.elapsed() in the last order.
         if output.needs_repaint || window_resized || state.mouse_btn_pressed() || timer.elapsed() {
             state.fuse_output(&mut window, &output);
             let clipped_mesh = egui_ctx.tessellate(shapes);

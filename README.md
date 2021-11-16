@@ -20,10 +20,12 @@ sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev lib
 
 ## Example
 
-Running examples/main.rs file:
+Running example *.rs files:
 
 ```
 cargo run --example main
+cargo run --example image
+cargo run --example image_svg --features=svg
 ```
 
 or [click here](https://github.com/Ar37-rs/egui-fltk-frontend/tree/main/examples) on how to use it inside Cargo.toml

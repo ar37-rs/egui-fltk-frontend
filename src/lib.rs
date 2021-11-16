@@ -1,15 +1,29 @@
+pub use egui;
 use egui::{CursorIcon, TextureId, Vec2};
+use egui_wgpu_backend::{
+    epi::{self, RepaintSignal},
+    wgpu, RenderPass, ScreenDescriptor,
+};
+pub use fltk;
 use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WidgetExt, WindowExt},
 };
-pub use egui;
-use egui_wgpu_backend::{epi::RepaintSignal, wgpu, RenderPass, ScreenDescriptor};
-pub use fltk;
 use std::{iter, num::NonZeroU32, sync::Arc, time::Instant};
 mod clipboard;
 use clipboard::Clipboard;
+
+#[cfg(feature = "svg")]
+use resvg::render;
+#[cfg(feature = "svg")]
+use std::io::{Error, ErrorKind};
+#[cfg(feature = "svg")]
+use tiny_skia::Pixmap;
+#[cfg(feature = "svg")]
+pub use usvg::Options;
+#[cfg(feature = "svg")]
+use usvg::{OptionsRef, Tree};
 
 /// Construct the frontend.
 ///
@@ -592,6 +606,131 @@ impl ImgWidget {
         }
     }
 
+    /// Currently Support all fltk images, except SVG.
+    pub fn from_fltk_image<I: ImageExt>(
+        fltk_image: I,
+        frame: &mut epi::Frame<'_>,
+    ) -> Option<ImgWidget> {
+        let w = fltk_image.width() as usize;
+        let h = fltk_image.height() as usize;
+        let rgb_image = match fltk_image.to_rgb() {
+            Ok(rgb_image) => rgb_image,
+            _ => return None,
+        };
+
+        let converted_rgb = match rgb_image.convert(enums::ColorDepth::Rgba8) {
+            Ok(converted_rgb) => converted_rgb,
+            _ => return None,
+        };
+
+        let texture_id;
+        {
+            let pixels: Vec<egui::Color32> = converted_rgb
+                .to_rgb_data()
+                .chunks_exact(4)
+                .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+                .collect();
+            texture_id = frame
+                .tex_allocator()
+                .alloc_srgba_premultiplied((w, h), &pixels);
+        }
+        let image = ImgWidget::new(
+            texture_id,
+            egui::Vec2 {
+                x: w as f32,
+                y: h as f32,
+            },
+        );
+        Some(image)
+    }
+
+    /// Same as from_fltk_image, only take ImageExt as ref.
+    pub fn from_fltk_image_ref(
+        fltk_image: &dyn ImageExt,
+        frame: &mut epi::Frame<'_>,
+    ) -> Option<ImgWidget> {
+        let w = fltk_image.width() as usize;
+        let h = fltk_image.height() as usize;
+        let rgb_image = match fltk_image.to_rgb() {
+            Ok(rgb_image) => rgb_image,
+            _ => return None,
+        };
+
+        let converted_rgb = match rgb_image.convert(enums::ColorDepth::Rgba8) {
+            Ok(converted_rgb) => converted_rgb,
+            _ => return None,
+        };
+
+        let texture_id;
+        {
+            let pixels: Vec<egui::Color32> = converted_rgb
+                .to_rgb_data()
+                .chunks_exact(4)
+                .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+                .collect();
+            texture_id = frame
+                .tex_allocator()
+                .alloc_srgba_premultiplied((w, h), &pixels);
+        }
+        let image = ImgWidget::new(
+            texture_id,
+            egui::Vec2 {
+                x: w as f32,
+                y: h as f32,
+            },
+        );
+        Some(image)
+    }
+
+    #[cfg(feature = "svg")]
+    /// Using resvg, usvg and tiny-skia under the hood.
+    pub fn from_svg_bytes(
+        bytes: &[u8],
+        opt_ref: OptionsRef,
+        frame: &mut epi::Frame<'_>,
+    ) -> std::io::Result<ImgWidget> {
+        let rtree = match Tree::from_data(bytes, &opt_ref) {
+            Ok(rtree) => rtree,
+            Err(e) => {
+                let err = Error::new(ErrorKind::Other, e.to_string());
+                return Err(err);
+            }
+        };
+        let tex;
+        let size;
+        {
+            let pixmap_size = rtree.svg_node().size.to_screen_size();
+            let mut pixmap = match Pixmap::new(pixmap_size.width(), pixmap_size.height()) {
+                Some(pixmap) => pixmap,
+                _ => {
+                    let err = Error::new(ErrorKind::Other, "while mapping SVG pixels!");
+                    return Err(err);
+                }
+            };
+
+            {
+                if render(&rtree, usvg::FitTo::Original, pixmap.as_mut()).is_none() {
+                    let err = Error::new(ErrorKind::Other, "while rendering SVG data!");
+                    return Err(err);
+                }
+            }
+            size = (pixmap_size.width() as usize, pixmap_size.height() as usize);
+            let pixels: Vec<egui::Color32> = pixmap
+                .data()
+                .chunks_exact(4)
+                .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
+                .collect();
+            tex = frame
+                .tex_allocator()
+                .alloc_srgba_premultiplied(size, &pixels);
+        }
+        let feimage = ImgWidget {
+            _texture_id: tex,
+            _size: Vec2::from((size.0 as f32, size.1 as f32)),
+        };
+        Ok(feimage)
+    }
+
     /// label: Debug label of the texture. This will show up in graphics debuggers for easy identification.
     pub fn from_rgba8(
         pixels: &[u8],
@@ -643,6 +782,35 @@ impl ImgWidget {
         }
         let image = ImgWidget::new(texture_id, egui::vec2(width as f32, height as f32));
         Ok(image)
+    }
+}
+
+/// Compat for epi::App trait
+pub struct Compat {
+    setup: bool,
+}
+
+impl Default for Compat {
+    fn default() -> Self {
+        Self { setup: false }
+    }
+}
+
+impl Compat {
+    /// Called once before the first frame.
+    pub fn setup<A: epi::App>(
+        &mut self,
+        app: &mut A,
+        ctx: &egui::CtxRef,
+        frame: &mut epi::Frame<'_>,
+        storage: Option<&dyn epi::Storage>,
+    ) {
+        if self.setup {
+            return;
+        } else {
+            app.setup(ctx, frame, storage);
+            self.setup = true;
+        }
     }
 }
 

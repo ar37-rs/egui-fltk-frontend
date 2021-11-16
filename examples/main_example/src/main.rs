@@ -18,9 +18,7 @@ use frontend::{
     },
     get_frame_time, DpiScaling, Signal, Timer,
 };
-use std::{cell::RefCell, rc::Rc};
-use std::{sync::Arc, time::Instant};
-
+use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
 
 fn main() {
@@ -178,6 +176,7 @@ fn main() {
         }
     });
 
+    // Use Timer for auto repaint if the app is idle.
     let mut timer = Timer::new(1);
 
     while a.wait() {
