@@ -117,6 +117,10 @@ impl<'a> epi::App for ImageDemo<'a> {
                         }
                         Progress::Error(e) => {
                             *err_label = Some(e.to_string().into());
+                            // And here.
+                            if let Some(this) = image_widget {
+                                frame.tex_allocator().free(this.texture_id());
+                            }
                             *image_widget = None;
                         }
                         Progress::Current(_) => *fetch_btn_label = "fetching...".into(),
