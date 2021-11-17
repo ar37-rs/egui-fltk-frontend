@@ -95,7 +95,7 @@ impl App for ImageSVGDemo {
                 Err(e) => {
                     eprintln!("{}", e.to_string());
                 }
-            };
+            }
         }
     }
 }

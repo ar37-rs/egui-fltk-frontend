@@ -2,114 +2,43 @@ use backend::{
     epi::{
         self,
         backend::{AppOutput, FrameBuilder},
-        App, IntegrationInfo,
+        IntegrationInfo,
     },
     wgpu,
 };
 use egui_fltk_frontend as frontend;
 use egui_wgpu_backend as backend;
 use frontend::{
-    egui::{self, CtxRef},
+    egui::CtxRef,
     fltk::{
-        self, app,
+        app,
         enums::Event,
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, Compat, DpiScaling, ImgWidget, ImgWidgetExt, Signal, Timer,
+    get_frame_time, Compat, DpiScaling, Signal, Timer,
 };
-use std::{cell::RefCell, io::Read, rc::Rc, sync::Arc, time::Instant};
-const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
+use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
 
-struct ImageDemo {
-    name: String,
-    age: u32,
-    image_widget: Option<ImgWidget>,
-}
+// // Run boxed mode, change fn run like so:
+// pub fn run_boxed(
+//     egui_app: Box<dyn epi::App>,
+//     window_size: (u32, u32),
+//     window_title: &str,
+//     integration: &'static str,
+// ) {
+//    ...
+// }
 
-impl Default for ImageDemo {
-    fn default() -> Self {
-        Self {
-            name: "Arthur".to_owned(),
-            age: 24,
-            image_widget: None,
-        }
-    }
-}
-
-impl App for ImageDemo {
-    fn name(&self) -> &str {
-        "My egui App"
-    }
-
-    fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
-        let Self {
-            name,
-            age,
-            image_widget,
-        } = self;
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("My egui Application");
-            ui.horizontal(|ui| {
-                ui.label("Your name: ");
-                ui.text_edit_singleline(name);
-            });
-            ui.add(egui::Slider::new(age, 0..=120).text("age"));
-            if ui.button("Click each year").clicked() {
-                *age += 1;
-            }
-            if let Some(image) = image_widget {
-                ui.add(image.widget());
-            }
-            ui.label(format!("Hello '{}', age {}", name, age));
-        });
-
-        // Resize the native window to be just the size we need it to be:
-        frame.set_window_size(ctx.used_size());
-    }
-
-    fn setup(
-        &mut self,
-        _ctx: &egui::CtxRef,
-        frame: &mut epi::Frame<'_>,
-        _storage: Option<&dyn epi::Storage>,
-    ) {
-        // Load fltk (jpg, png, bmp ...) image accordingly.
-        let mut buf = Vec::new();
-        let mut _file = match std::fs::File::open("examples/resources/nature.jpg") {
-            Ok(_file) => _file,
-            Err(e) => {
-                eprintln!("{}", e.to_string());
-                return;
-            }
-        };
-
-        if let Err(e) = _file.read_to_end(&mut buf) {
-            eprintln!("{}", e.to_string());
-        } else {
-            match fltk::image::JpegImage::from_data(&buf) {
-                Ok(fltk_image) => self.image_widget = fltk_image.into_img_widget(frame),
-                Err(e) => {
-                    eprintln!("{}", e.to_string());
-                }
-            }
-        }
-
-        // // Or simply
-        // match fltk::image::JpegImage::load("examples/resources/nature.jpg") {
-        //     Ok(fltk_image) => self.image_widget = ImgWidget::from_fltk_image(fltk_image, frame),
-        //     Err(e) => eprintln!("{}", e.to_string()),
-        // }
-    }
-}
-
-fn main() {
+pub fn run<I>(egui_app: I, window_size: (u32, u32), window_title: &str, integration: &'static str)
+where
+    I: epi::App + 'static,
+{
     let a = app::App::default();
     let mut window = window::Window::default()
-        .with_size(600, 800)
+        .with_size(window_size.0 as i32, window_size.1 as i32)
         .center_screen();
-    window.set_label("Image Demo Window");
+    window.set_label(window_title);
     window.make_resizable(true);
     window.end();
     window.show();
@@ -190,7 +119,7 @@ fn main() {
     let painter = Rc::new(RefCell::new(painter));
 
     // Display the demo application that ships with egui.
-    let image_demo = Rc::new(RefCell::new(ImageDemo::default()));
+    let egui_app = Rc::new(RefCell::new(egui_app));
     let egui_ctx = Rc::new(RefCell::new(CtxRef::default()));
     let repaint_signal = Arc::new(Signal::default());
     let start_time = Instant::now();
@@ -204,7 +133,7 @@ fn main() {
         let egui_ctx = egui_ctx.clone();
         let device = device.clone();
         let queue = queue.clone();
-        let image_demo = image_demo.clone();
+        let egui_app = egui_app.clone();
         let app_output = app_output.clone();
         move |window| {
             // And here also using "if let ..." for safety.
@@ -225,7 +154,7 @@ fn main() {
                                     cpu_usage: Some(frame_time),
                                     native_pixels_per_point: Some(state.pixels_per_point),
                                     prefer_dark_mode: None,
-                                    name: INTEGRATION_NAME,
+                                    name: integration,
                                 },
                                 tex_allocator: &mut painter.render_pass,
                                 output: &mut app_output,
@@ -237,8 +166,8 @@ fn main() {
                             egui_ctx.begin_frame(state.input.take());
 
                             // Draw the demo application.
-                            let mut image_demo = image_demo.borrow_mut();
-                            image_demo.update(&egui_ctx, &mut frame);
+                            let mut egui_app = egui_app.borrow_mut();
+                            egui_app.update(&egui_ctx, &mut frame);
                         }
 
                         // End the UI frame. We could now handle the output and draw the UI with the backend.
@@ -281,7 +210,7 @@ fn main() {
                     cpu_usage: Some(frame_time),
                     native_pixels_per_point: Some(state.pixels_per_point),
                     prefer_dark_mode: None,
-                    name: INTEGRATION_NAME,
+                    name: integration,
                 },
                 tex_allocator: &mut painter.render_pass,
                 output: &mut app_output,
@@ -293,13 +222,13 @@ fn main() {
             egui_ctx.begin_frame(state.input.take());
 
             // Draw the demo application.
-            let mut image_demo = image_demo.borrow_mut();
+            let mut egui_app = egui_app.borrow_mut();
             // Setup
             if compat.needs_setup() {
-                image_demo.setup(&egui_ctx, &mut frame, None);
+                egui_app.setup(&egui_ctx, &mut frame, None);
             }
             // Update
-            image_demo.update(&egui_ctx, &mut frame);
+            egui_app.update(&egui_ctx, &mut frame);
         }
 
         // End the UI frame. We could now handle the output and draw the UI with the backend.
