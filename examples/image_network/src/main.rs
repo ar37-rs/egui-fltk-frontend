@@ -102,7 +102,6 @@ impl<'a> epi::App for ImageDemo<'a> {
                 }
             }
 
-
             // Only resolve if task is some.
             if let Some(this) = task {
                 let mut task_should_free = false;
