@@ -68,12 +68,10 @@ impl<'a> epi::App for ImageDemo<'a> {
                                 };
 
                                 // Url to .jpg image
-                                let url = format!("https://picsum.photos/seed/{}/640/480", current_seed);
+                                let url =
+                                    format!("https://picsum.photos/seed/{}/640/480", current_seed);
 
-                                let request = match client
-                                    .get(url)
-                                    .build()
-                                {
+                                let request = match client.get(url).build() {
                                     Ok(request) => request,
                                     Err(e) => return Progress::Error(e.to_string().into()),
                                 };
@@ -108,6 +106,10 @@ impl<'a> epi::App for ImageDemo<'a> {
                 this.try_resolve(|progress, done| {
                     match progress {
                         Progress::Completed(jpg) => {
+                            // Just to make sure, free unused texture id.
+                            if let Some(this) = image_widget {
+                                frame.tex_allocator().free(this.texture_id());
+                            }
                             *image_widget = fltk::image::JpegImage::from_data(&jpg)
                                 .unwrap()
                                 .into_img_widget(frame);
@@ -121,8 +123,10 @@ impl<'a> epi::App for ImageDemo<'a> {
                         _ => (),
                     }
                     if done {
+                        // Redraw
+                        frame.repaint_signal();
                         task_should_free = true;
-                        *fetch_btn_label = "refetch the image".into();
+                        *fetch_btn_label = "fetch next image".into();
                     }
                 });
 
