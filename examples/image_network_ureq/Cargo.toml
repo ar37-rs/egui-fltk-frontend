@@ -1,0 +1,20 @@
+[package]
+name = "image_network_ureq"
+version = "0.3.4"
+edition = "2018"
+authors = ["Ar37-rs <adyaro37@gmail.com>"]
+publish = false
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+# WGPU requires cargo resolver v2
+resolver = "2"
+
+[dependencies]
+# With fltk-bundled (faster build time) features work on windows, linux and mac x64 only (requires curl and tar)
+# egui-fltk-frontend = { version = "0.3", features = ["fltk-bundled"] }
+egui-fltk-frontend = "0.3"
+egui_wgpu_backend = "0.14"
+asynchron = "0.9"
+pollster = "0.2"
+ureq = "2"
+

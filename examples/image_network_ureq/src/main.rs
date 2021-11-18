@@ -6,25 +6,21 @@ use egui_wgpu_backend as backend;
 use frontend::{egui, fltk, ImgWidget, ImgWidgetExt};
 use std::{borrow::Cow, time::Duration};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
+use std::io::Read;
+use ureq::{Agent, AgentBuilder};
 
-struct ImageDemoReqwest<'a> {
+struct ImageDemoUreq<'a> {
     image_widget: Option<ImgWidget>,
-    tokio_rt: tokio::runtime::Runtime,
     task: Option<Futurized<(), Vec<u8>>>,
     fetch_btn_label: Cow<'a, str>,
     err_label: Option<Cow<'a, str>>,
     seed: usize,
 }
 
-impl<'a> Default for ImageDemoReqwest<'a> {
+impl<'a> Default for ImageDemoUreq<'a> {
     fn default() -> Self {
-        let tokio_rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap();
         Self {
             image_widget: None,
-            tokio_rt,
             task: None,
             fetch_btn_label: "fetch image".into(),
             err_label: None,
@@ -33,7 +29,7 @@ impl<'a> Default for ImageDemoReqwest<'a> {
     }
 }
 
-impl<'a> epi::App for ImageDemoReqwest<'a> {
+impl<'a> epi::App for ImageDemoUreq<'a> {
     fn name(&self) -> &str {
         "world"
     }
@@ -41,7 +37,6 @@ impl<'a> epi::App for ImageDemoReqwest<'a> {
     fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame<'_>) {
         let Self {
             image_widget,
-            tokio_rt,
             task,
             fetch_btn_label,
             err_label,
@@ -49,60 +44,52 @@ impl<'a> epi::App for ImageDemoReqwest<'a> {
         } = self;
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Image Newtork Demo Reqwest");
+            ui.heading("Image Newtork Demo Ureq");
             if ui.button(&fetch_btn_label).clicked() {
                 // Create new task if only task is None or freed.
                 if task.is_none() {
                     let current_seed = *seed;
-                    let rt = tokio_rt.handle().clone();
                     let new_task = Futurize::task(
                         current_seed,
                         move |_task: InnerTaskHandle| -> Progress<(), Vec<u8>> {
-                            rt.block_on(async {
-                                let timeout = Duration::from_secs(3);
-                                let client = match reqwest::Client::builder()
-                                    .connect_timeout(timeout)
-                                    .build()
-                                {
-                                    Ok(client) => client,
-                                    Err(e) => return Progress::Error(e.to_string().into()),
-                                };
+                            let timeout = Duration::from_secs(3);
+                            let agent: Agent = AgentBuilder::new()
+                                .timeout_read(timeout)
+                                .timeout_write(timeout)
+                                .build();
 
-                                // Url to .jpg image
-                                let url =
-                                    format!("https://picsum.photos/seed/{}/640/480", current_seed);
+                            // Url to .jpg image
+                            let url =
+                                format!("https://picsum.photos/seed/{}/640/480", current_seed);
 
-                                let request = match client.get(url).build() {
-                                    Ok(request) => request,
-                                    Err(e) => return Progress::Error(e.to_string().into()),
-                                };
+                            let response = if let Ok(response) = agent.get(&url).call() {
+                                response
+                            } else {
+                                return Progress::Error(
+                                    format!("Network problem, unable to request url: {}", &url)
+                                        .into(),
+                                );
+                            };
 
-                                let response = match client.execute(request).await {
-                                    Ok(response) => response,
-                                    Err(e) => return Progress::Error(e.to_string().into()),
-                                };
+                            println!("Status: {}\n", response.status());
+                            println!("Url: {}\n", response.get_url());
+                            println!("HTTP Version: {}\n", response.http_version());
+                            println!("Content-Type: {}\n", response.content_type());
+                            println!("Charset: {}\n", response.charset());
 
-                                println!("Status: {}\n", response.status());
+                            let mut buf: Vec<u8> = Vec::new();
+                            if let Err(e) = response.into_reader().read_to_end(&mut buf) {
+                                return Progress::Error(e.to_string().into());
+                            }
 
-                                for value in response.headers().values() {
-                                    println!("{}\n", value.to_str().unwrap());
-                                }
-
-                                let content = match response.bytes().await {
-                                    Ok(r) => r,
-                                    Err(e) => return Progress::Error(e.to_string().into()),
-                                };
-                                Progress::Completed(content.to_vec())
-                            })
+                            Progress::Completed(buf)
                         },
                     );
                     new_task.try_do();
                     *task = Some(new_task);
                     *seed += 1;
                 } else {
-                    println!(
-                        "fecth button clicked, \nReqwest is busy, please wait until it done.\n"
-                    );
+                    println!("fecth button clicked, \nUreq is busy, please wait until it done.\n");
                 }
             }
 
@@ -164,7 +151,7 @@ impl<'a> epi::App for ImageDemoReqwest<'a> {
 
 fn main() {
     framework::run_boxed(
-        Box::new(ImageDemoReqwest::default()),
+        Box::new(ImageDemoUreq::default()),
         (656, 800),
         "hello",
         INTEGRATION_NAME,
