@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 description = "FLTK frontend for Egui WGPU backend"
@@ -10,6 +10,7 @@ keywords = ["GUI", "egui", "fltk", "wgpu"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ar37-rs/egui-fltk-frontend"
 resolver = "2"
+exclude = ["screenshot/"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
