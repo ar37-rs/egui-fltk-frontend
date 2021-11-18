@@ -35,3 +35,7 @@ cargo run --example image_svg --features=svg
 ```
 
 or [click here](https://github.com/Ar37-rs/egui-fltk-frontend/tree/main/examples) on how to use it inside Cargo.toml
+
+## Screenshot
+[main_example](https://github.com/Ar37-rs/egui-fltk-frontend/tree/main/examples/main.rs) running on WSL2 + X Server:
+![alt_test](screenshot/main.png)
