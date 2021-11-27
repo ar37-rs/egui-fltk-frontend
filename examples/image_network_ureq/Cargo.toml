@@ -15,6 +15,6 @@ resolver = "2"
 egui-fltk-frontend = "0.3"
 egui_wgpu_backend = "0.14"
 pollster = "0.2"
-flowync = "0.2"
+flowync = "1"
 ureq = "2"
 
