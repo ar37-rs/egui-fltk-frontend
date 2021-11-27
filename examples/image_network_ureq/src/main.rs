@@ -1,23 +1,23 @@
 mod framework;
-use asynchron::{Futurize, Futurized, InnerTaskHandle, Progress};
 use backend::epi;
 use egui_fltk_frontend as frontend;
 use egui_wgpu_backend as backend;
+use flowync::Leaper;
 use frontend::{egui, fltk, ImgWidget, ImgWidgetExt};
-use std::{borrow::Cow, time::Duration};
-const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
-use std::io::Read;
+use std::time::Duration;
+use std::{io::Read, thread};
 use ureq::{Agent, AgentBuilder};
+const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
 
-struct ImageDemoUreq<'a> {
+struct ImageDemoUreq {
     image_widget: Option<ImgWidget>,
-    task: Option<Futurized<(), Vec<u8>>>,
-    fetch_btn_label: Cow<'a, str>,
-    err_label: Option<Cow<'a, str>>,
+    task: Option<Leaper<Vec<u8>>>,
+    fetch_btn_label: String,
+    err_label: Option<String>,
     seed: usize,
 }
 
-impl<'a> Default for ImageDemoUreq<'a> {
+impl Default for ImageDemoUreq {
     fn default() -> Self {
         Self {
             image_widget: None,
@@ -29,7 +29,7 @@ impl<'a> Default for ImageDemoUreq<'a> {
     }
 }
 
-impl<'a> epi::App for ImageDemoUreq<'a> {
+impl epi::App for ImageDemoUreq {
     fn name(&self) -> &str {
         "world"
     }
@@ -49,9 +49,10 @@ impl<'a> epi::App for ImageDemoUreq<'a> {
                 // Create new task if only task is None or freed.
                 if task.is_none() {
                     let current_seed = *seed;
-                    let new_task = Futurize::task(
-                        current_seed,
-                        move |_task: InnerTaskHandle| -> Progress<(), Vec<u8>> {
+                    let new_task = Leaper::new(current_seed);
+                    thread::spawn({
+                        let handle = new_task.handle();
+                        move || {
                             let timeout = Duration::from_secs(3);
                             let agent: Agent = AgentBuilder::new()
                                 .timeout_read(timeout)
@@ -62,13 +63,11 @@ impl<'a> epi::App for ImageDemoUreq<'a> {
                             let url =
                                 format!("https://picsum.photos/seed/{}/640/480", current_seed);
 
-                            let response = if let Ok(response) = agent.get(&url).call() {
-                                response
-                            } else {
-                                return Progress::Error(
-                                    format!("Network problem, unable to request url: {}", &url)
-                                        .into(),
-                                );
+                            let response = match agent.get(&url).call() {
+                                Ok(response) => response,
+                                Err(e) => {
+                                    return handle.err(e.to_string());
+                                }
                             };
 
                             println!("Status: {}\n", response.status());
@@ -79,13 +78,11 @@ impl<'a> epi::App for ImageDemoUreq<'a> {
 
                             let mut buf: Vec<u8> = Vec::new();
                             if let Err(e) = response.into_reader().read_to_end(&mut buf) {
-                                return Progress::Error(e.to_string().into());
+                                return handle.err(e.to_string());
                             }
-
-                            Progress::Completed(buf)
-                        },
-                    );
-                    new_task.try_do();
+                            handle.ok(buf);
+                        }
+                    });
                     *task = Some(new_task);
                     *seed += 1;
                 } else {
@@ -95,10 +92,11 @@ impl<'a> epi::App for ImageDemoUreq<'a> {
 
             // Only resolve if task is some.
             if let Some(this) = task {
+                *fetch_btn_label = "fetching...".into();
                 let mut task_should_free = false;
-                this.try_resolve(|progress, done| {
-                    match progress {
-                        Progress::Completed(jpg) => {
+                this.try_catch(|result| {
+                    match result {
+                        Ok(jpg) => {
                             // Just to make sure, free unused texture id.
                             if let Some(this) = image_widget {
                                 frame.tex_allocator().free(this.texture_id());
@@ -108,28 +106,25 @@ impl<'a> epi::App for ImageDemoUreq<'a> {
                                 .into_img_widget(frame);
                             *err_label = None;
                         }
-                        Progress::Error(e) => {
-                            *err_label = Some(e.to_string().into());
+                        Err(e) => {
+                            *err_label = Some(e);
                             // And here.
                             if let Some(this) = image_widget {
                                 frame.tex_allocator().free(this.texture_id());
                             }
                             *image_widget = None;
                         }
-                        Progress::Current(_) => *fetch_btn_label = "fetching...".into(),
-                        _ => (),
                     }
-                    if done {
-                        // Redraw
-                        frame.repaint_signal();
-                        task_should_free = true;
-                        *fetch_btn_label = "fetch next image".into();
-                    }
+
+                    // Free task.
+                    task_should_free = true;
                 });
 
-                // Free task.
                 if task_should_free {
                     *task = None;
+                    // Redraw egui.
+                    frame.repaint_signal();
+                    *fetch_btn_label = "fetch next image".into();
                 }
             }
 
