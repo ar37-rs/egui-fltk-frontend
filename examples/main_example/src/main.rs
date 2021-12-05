@@ -111,6 +111,7 @@ fn main() {
     let egui_ctx = Rc::new(RefCell::new(CtxRef::default()));
     let repaint_signal = Arc::new(Signal::default());
     let start_time = Instant::now();
+    let mut cpu_usage = get_frame_time(start_time);
     let app_output = Rc::new(RefCell::new(AppOutput::default()));
 
     // Redraw window while being resized (required on windows platform).
@@ -129,17 +130,17 @@ fn main() {
                 if state.window_resized() {
                     window.clear_damage();
                     if let Ok(mut painter) = painter.try_borrow_mut() {
+                        let egui_start = Instant::now();
                         let mut egui_ctx = egui_ctx.borrow_mut();
                         let mut device = device.borrow_mut();
                         let mut queue = queue.borrow_mut();
                         let mut app_output = app_output.borrow_mut();
                         {
                             // Begin frame
-                            let frame_time = get_frame_time(start_time);
                             let mut frame = FrameBuilder {
                                 info: IntegrationInfo {
                                     web_info: None,
-                                    cpu_usage: Some(frame_time),
+                                    cpu_usage: Some(cpu_usage),
                                     native_pixels_per_point: Some(state.pixels_per_point),
                                     prefer_dark_mode: None,
                                     name: INTEGRATION_NAME,
@@ -160,6 +161,7 @@ fn main() {
 
                         // End the UI frame. We could now handle the output and draw the UI with the backend.
                         let (output, shapes) = egui_ctx.end_frame();
+                        cpu_usage = (Instant::now() - egui_start).as_secs_f64() as f32;
                         state.fuse_output(window, &output);
                         let clipped_mesh = egui_ctx.tessellate(shapes);
                         let texture = egui_ctx.texture();
@@ -180,6 +182,7 @@ fn main() {
     let mut timer = Timer::new(1);
 
     while a.wait() {
+        let egui_start = Instant::now();
         let mut state = state.borrow_mut();
         let mut painter = painter.borrow_mut();
         let mut egui_ctx = egui_ctx.borrow_mut();
@@ -187,12 +190,10 @@ fn main() {
         let mut queue = queue.borrow_mut();
         let mut app_output = app_output.borrow_mut();
         {
-            // Begin frame
-            let frame_time = get_frame_time(start_time);
             let mut frame = FrameBuilder {
                 info: IntegrationInfo {
                     web_info: None,
-                    cpu_usage: Some(frame_time),
+                    cpu_usage: Some(cpu_usage),
                     native_pixels_per_point: Some(state.pixels_per_point),
                     prefer_dark_mode: None,
                     name: INTEGRATION_NAME,
@@ -213,6 +214,8 @@ fn main() {
 
         // End the UI frame. We could now handle the output and draw the UI with the backend.
         let (output, shapes) = egui_ctx.end_frame();
+        cpu_usage = (Instant::now() - egui_start).as_secs_f64() as f32;
+
         if app_output.quit {
             break;
         }
