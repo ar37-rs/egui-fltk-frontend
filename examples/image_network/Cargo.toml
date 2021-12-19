@@ -1,6 +1,6 @@
 [package]
 name = "image_network"
-version = "0.3.5"
+version = "0.15.0"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 publish = false
@@ -11,9 +11,9 @@ resolver = "2"
 
 [dependencies]
 # With fltk-bundled (faster build time) features work on windows, linux and mac x64 only (requires curl and tar)
-# egui-fltk-frontend = { version = "0.3", features = ["fltk-bundled"] }
-egui-fltk-frontend = "0.3"
-egui_wgpu_backend = "0.14"
+# egui-fltk-frontend = { version = "0.15", features = ["fltk-bundled"] }
+egui-fltk-frontend = "0.15"
+egui_wgpu_backend = "0.15"
 flowync = "1"
 pollster = "0.2"
 reqwest = "0.11"

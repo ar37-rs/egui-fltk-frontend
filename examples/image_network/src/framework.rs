@@ -16,7 +16,7 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, Compat, DpiScaling, Signal, Timer,
+    get_frame_time, Compat, DpiScaling, Signal, Timer, WindowToWGPUSurfaceExt,
 };
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
 
@@ -35,16 +35,25 @@ pub fn run_boxed(
     integration: &'static str,
 ) {
     let a = app::App::default();
+
+    // Initialize fltk windows with minimal size:
     let mut window = window::Window::default()
-        .with_size(window_size.0 as i32, window_size.1 as i32)
+        .with_size(200, 200)
         .center_screen();
+
     window.set_label(window_title);
     window.make_resizable(true);
     window.end();
     window.show();
+
+    // Fix window resizable on fltk 1.2.20+
+    window.set_size(window_size.0 as i32, window_size.1 as i32);
+    window = window.center_screen();
+
     window.make_current();
+
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-    let surface = unsafe { instance.create_surface(&window) };
+    let surface = unsafe { instance.create_surface(&window.wgpu_surface()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

@@ -846,3 +846,61 @@ impl Timer {
         false
     }
 }
+
+pub trait WindowToWGPUSurfaceExt<'a> {
+    fn wgpu_surface(&'a self) -> RwhCompat3t4;
+}
+
+impl<'a> WindowToWGPUSurfaceExt<'a> for fltk::window::Window {
+    fn wgpu_surface(&'a self) -> RwhCompat3t4 {
+        RwhCompat3t4(self)
+    }
+}
+
+pub struct RwhCompat3t4<'a>(&'a fltk::window::Window);
+
+unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat3t4<'a> {
+    fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
+        #[cfg(target_os = "windows")]
+        {
+            let mut handle = raw_window_handle::Win32Handle::empty();
+            handle.hwnd = self.0.raw_handle();
+            handle.hinstance = fltk::app::display();
+            return raw_window_handle::RawWindowHandle::Win32(handle);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            let raw = self.0.raw_handle();
+            extern "C" {
+                pub fn cfltk_getContentView(xid: *mut raw::c_void) -> *mut raw::c_void;
+            }
+            let cv = unsafe { cfltk_getContentView(raw) };
+            let mut handle = raw_window_handle::AppKitHandle::empty();
+            handle.ns_window = raw;
+            handle.ns_view = cv as _;
+            return raw_window_handle::RawWindowHandle::AppKit(handle);
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            let mut handle = raw_window_handle::AndroidNdkHandle::empty();
+            handle.a_native_window = self.0.raw_handle();
+            return raw_window_handle::RawWindowHandle::AndroidNdk(handle);
+        }
+
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd",
+        ))]
+        {
+            let mut handle = raw_window_handle::XlibHandle::empty();
+            handle.window = self.0.raw_handle();
+            handle.display = fltk::app::display();
+            return raw_window_handle::RawWindowHandle::Xlib(handle);
+        }
+    }
+}
