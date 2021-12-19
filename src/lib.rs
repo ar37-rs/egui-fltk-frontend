@@ -849,27 +849,27 @@ impl Timer {
 
 /// Compat trait ext for RawWindowHandle 4.x
 ///
-pub trait RWHandleExt<'a> {
+pub trait RWHandleExt {
     /// use raw-window-handle 4.x compatible
-    fn use_compat(&'a self) -> RwhCompat;
+    fn use_compat(&self) -> RwhCompat;
 }
 
-impl<'a> RWHandleExt<'a> for fltk::window::Window {
-    fn use_compat(&'a self) -> RwhCompat {
-        RwhCompat(self)
+impl RWHandleExt for fltk::window::Window {
+    fn use_compat(&self) -> RwhCompat {
+        RwhCompat(self.raw_handle())
     }
 }
 
 /// Compat for RawWindowHandle 4.x
 ///
-pub struct RwhCompat<'a>(&'a fltk::window::Window);
+pub struct RwhCompat(fltk::window::RawHandle);
 
-unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat<'a> {
+unsafe impl raw_window_handle::HasRawWindowHandle for RwhCompat {
     fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
         #[cfg(target_os = "windows")]
         {
             let mut handle = raw_window_handle::Win32Handle::empty();
-            handle.hwnd = self.0.raw_handle();
+            handle.hwnd = self.0;
             handle.hinstance = fltk::app::display();
             return raw_window_handle::RawWindowHandle::Win32(handle);
         }
@@ -878,7 +878,7 @@ unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat<'a> {
         {
             use std::os::raw::c_void;
             
-            let raw = self.0.raw_handle();
+            let raw = self.0;
             extern "C" {
                 pub fn cfltk_getContentView(xid: *mut c_void) -> *mut c_void;
             }
@@ -892,7 +892,7 @@ unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat<'a> {
         #[cfg(target_os = "android")]
         {
             let mut handle = raw_window_handle::AndroidNdkHandle::empty();
-            handle.a_native_window = self.0.raw_handle();
+            handle.a_native_window = self.0;
             return raw_window_handle::RawWindowHandle::AndroidNdk(handle);
         }
 
@@ -905,7 +905,7 @@ unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat<'a> {
         ))]
         {
             let mut handle = raw_window_handle::XlibHandle::empty();
-            handle.window = self.0.raw_handle();
+            handle.window = self.0;
             handle.display = fltk::app::display();
             return raw_window_handle::RawWindowHandle::Xlib(handle);
         }

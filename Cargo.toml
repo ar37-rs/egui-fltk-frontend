@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.15.0"
+version = "0.15.1"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 description = "FLTK frontend for Egui WGPU backend"
@@ -14,9 +14,9 @@ exclude = ["screenshot/"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+fltk = "1.2"
 egui = "0.15"
 egui_wgpu_backend = "0.15"
-fltk = { version = "1.2" }
 raw-window-handle = "0.4"
 
 [target."cfg(windows)".dependencies.copypasta]
