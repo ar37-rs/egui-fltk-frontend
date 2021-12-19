@@ -16,7 +16,7 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, DpiScaling, Signal, Timer, WindowToWGPUSurfaceExt,
+    get_frame_time, DpiScaling, RWHandleExt, Signal, Timer,
 };
 use std::{cell::RefCell, rc::Rc, sync::Arc, time::Instant};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
@@ -35,12 +35,12 @@ fn main() {
 
     // Fix window resizable on fltk 1.2.20+
     window.set_size(800, 600);
-    window  = window.center_screen();
+    window = window.center_screen();
 
     window.make_current();
 
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-    let surface = unsafe { instance.create_surface(&window.wgpu_surface()) };
+    let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

@@ -16,7 +16,7 @@ exclude = ["screenshot/"]
 [dependencies]
 egui = "0.15"
 egui_wgpu_backend = "0.15"
-fltk = { version = "1.2", features = ["raw-window-handle", "fltk-bundled"] }
+fltk = { version = "1.2" }
 raw-window-handle = "0.4"
 
 [target."cfg(windows)".dependencies.copypasta]

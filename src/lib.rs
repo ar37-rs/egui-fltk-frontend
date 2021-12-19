@@ -847,19 +847,24 @@ impl Timer {
     }
 }
 
-pub trait WindowToWGPUSurfaceExt<'a> {
-    fn wgpu_surface(&'a self) -> RwhCompat3t4;
+/// Compat trait ext for RawWindowHandle 4.x
+///
+pub trait RWHandleExt<'a> {
+    /// use raw-window-handle 4.x compatible
+    fn use_compat(&'a self) -> RwhCompat;
 }
 
-impl<'a> WindowToWGPUSurfaceExt<'a> for fltk::window::Window {
-    fn wgpu_surface(&'a self) -> RwhCompat3t4 {
-        RwhCompat3t4(self)
+impl<'a> RWHandleExt<'a> for fltk::window::Window {
+    fn use_compat(&'a self) -> RwhCompat {
+        RwhCompat(self)
     }
 }
 
-pub struct RwhCompat3t4<'a>(&'a fltk::window::Window);
+/// Compat for RawWindowHandle 4.x
+///
+pub struct RwhCompat<'a>(&'a fltk::window::Window);
 
-unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat3t4<'a> {
+unsafe impl<'a> raw_window_handle::HasRawWindowHandle for RwhCompat<'a> {
     fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
         #[cfg(target_os = "windows")]
         {

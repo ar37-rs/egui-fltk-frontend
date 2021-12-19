@@ -16,7 +16,7 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    get_frame_time, Compat, DpiScaling, ImgWidget, Options, Signal, Timer, WindowToWGPUSurfaceExt,
+    get_frame_time, Compat, DpiScaling, ImgWidget, Options, RWHandleExt, Signal, Timer,
 };
 use std::{cell::RefCell, io::Read, rc::Rc, sync::Arc, time::Instant};
 const INTEGRATION_NAME: &str = "egui + fltk + wgpu-backend";
@@ -117,7 +117,7 @@ fn main() {
     window = window.center_screen();
 
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-    let surface = unsafe { instance.create_surface(&window.wgpu_surface()) };
+    let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
