@@ -877,7 +877,7 @@ unsafe impl raw_window_handle::HasRawWindowHandle for RwhCompat {
         #[cfg(target_os = "macos")]
         {
             use std::os::raw::c_void;
-            
+
             let raw = self.0;
             extern "C" {
                 pub fn cfltk_getContentView(xid: *mut c_void) -> *mut c_void;
