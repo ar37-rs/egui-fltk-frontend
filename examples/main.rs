@@ -2,7 +2,7 @@ use backend::wgpu;
 use egui_fltk_frontend as frontend;
 use egui_wgpu_backend as backend;
 use frontend::{
-    epi::egui::{self, Label},
+    egui::{self, Label},
     fltk::{
         app,
         enums::Event,
@@ -78,13 +78,13 @@ fn main() {
             | Event::Move
             | Event::Drag
             | Event::Focus => {
-                let mut handled = false;
                 // Using "if let ..." for safety.
                 if let Ok(mut state) = state.try_borrow_mut() {
                     state.fuse_input(win, ev);
-                    handled = true;
+                    true
+                } else {
+                    false
                 }
-                handled
             }
             _ => false,
         }
@@ -97,7 +97,7 @@ fn main() {
 
     // Display the demo application that ships with egui.
     let demo_app = Rc::new(RefCell::new(egui_demo_lib::DemoWindows::default()));
-    let egui_ctx = Rc::new(RefCell::new(epi::egui::Context::default()));
+    let egui_ctx = Rc::new(RefCell::new(egui::Context::default()));
     let start_time = Instant::now();
 
     // // Redraw window while being resized (required on windows platform).

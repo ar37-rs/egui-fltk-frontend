@@ -1,8 +1,8 @@
+pub use egui;
+use egui::{CursorIcon, Event, Vec2};
 pub use egui_extras;
 use egui_extras::RetainedImage;
 use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
-pub use epi;
-use epi::egui::{self, CursorIcon, Event, Vec2};
 pub use fltk;
 use fltk::{
     app,
@@ -21,7 +21,7 @@ pub fn begin_with(
     surface_config: wgpu::SurfaceConfiguration,
 ) -> (Painter, EguiState) {
     app::set_screen_scale(window.screen_num(), 1.0);
-    let scale =  window.pixels_per_unit();
+    let scale = window.pixels_per_unit();
     let x = window.width();
     let y = window.height();
     let rect = egui::vec2(x as f32, y as f32) / scale;
@@ -60,10 +60,6 @@ impl Default for Signal {
     fn default() -> Self {
         Self {}
     }
-}
-
-impl epi::backend::RepaintSignal for Signal {
-    fn request_repaint(&self) {}
 }
 
 pub struct Painter {
