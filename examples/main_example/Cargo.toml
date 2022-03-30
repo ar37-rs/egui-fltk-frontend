@@ -1,6 +1,6 @@
 [package]
 name = "main_example"
-version = "0.15.0"
+version = "0.17.0"
 edition = "2018"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 publish = false
@@ -11,8 +11,8 @@ resolver = "2"
 
 [dependencies]
 # With fltk-bundled (faster build time) features work on windows, linux and mac x64 only (requires curl and tar)
-# egui-fltk-frontend = { version = "0.15", features = ["fltk-bundled"] }
-egui-fltk-frontend = "0.15"
-egui_demo_lib = "0.15"
-egui_wgpu_backend = "0.15.0"
+# egui-fltk-frontend = { version = "0.17", features = ["fltk-bundled"] }
+egui-fltk-frontend = "0.17"
+egui_demo_lib = "0.17"
+egui_wgpu_backend = "0.17"
 pollster = "0.2"

@@ -1,42 +1,27 @@
-pub use egui;
-use egui::{CursorIcon, TextureId, Vec2};
-use egui_wgpu_backend::{epi, wgpu, RenderPass, ScreenDescriptor};
+pub use egui_extras;
+use egui_extras::RetainedImage;
+use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
+pub use epi;
+use epi::egui::{self, CursorIcon, Event, Vec2};
 pub use fltk;
 use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WidgetExt, WindowExt},
 };
-use std::{iter, num::NonZeroU32, sync::Arc, time::Instant};
+use std::{iter, time::Instant};
 mod clipboard;
 use clipboard::Clipboard;
 
-#[cfg(feature = "svg")]
-use resvg::render;
-#[cfg(feature = "svg")]
-use std::io::{Error, ErrorKind};
-#[cfg(feature = "svg")]
-use tiny_skia::Pixmap;
-#[cfg(feature = "svg")]
-pub use usvg::Options;
-#[cfg(feature = "svg")]
-use usvg::{OptionsRef, Tree};
-
 /// Construct the frontend.
-///
-/// DpiScaling can be Default or Custom(f32)
 pub fn begin_with(
     window: &mut fltk::window::Window,
     render_pass: RenderPass,
     surface: wgpu::Surface,
     surface_config: wgpu::SurfaceConfiguration,
-    scale: DpiScaling,
 ) -> (Painter, EguiState) {
     app::set_screen_scale(window.screen_num(), 1.0);
-    let scale = match scale {
-        DpiScaling::Default => window.pixels_per_unit(),
-        DpiScaling::Custom(custom) => custom,
-    };
+    let scale =  window.pixels_per_unit();
     let x = window.width();
     let y = window.height();
     let rect = egui::vec2(x as f32, y as f32) / scale;
@@ -63,6 +48,8 @@ pub fn begin_with(
         screen_rect,
         clipboard: clipboard::Clipboard::default(),
         _mouse_btn_pressed: false,
+        scroll_factor: 12.,
+        zoom_factor: 8.,
     };
     (painter, state)
 }
@@ -75,7 +62,7 @@ impl Default for Signal {
     }
 }
 
-impl epi::RepaintSignal for Signal {
+impl epi::backend::RepaintSignal for Signal {
     fn request_repaint(&self) {}
 }
 
@@ -92,7 +79,7 @@ impl Painter {
         queue: &mut wgpu::Queue,
         state: &mut EguiState,
         clipped_mesh: Vec<egui::ClippedMesh>,
-        texture: Arc<egui::Texture>,
+        texture: egui::TexturesDelta,
     ) {
         // Upload all resources for the GPU.
         let screen_descriptor;
@@ -125,8 +112,7 @@ impl Painter {
         });
         let render_pass = &mut self.render_pass;
         render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
-        render_pass.update_texture(&device, &queue, &texture);
-        render_pass.update_user_textures(&device, &queue);
+        render_pass.add_textures(&device, &queue, &texture).unwrap();
         render_pass
             .execute(
                 &mut encoder,
@@ -145,14 +131,6 @@ impl Painter {
 /// Frame time for CPU usage.
 pub fn get_frame_time(start_time: Instant) -> f32 {
     (Instant::now() - start_time).as_secs_f64() as f32
-}
-
-/// The scaling factors of the app
-pub enum DpiScaling {
-    /// Default DPI Scale by fltk, usually 1.0
-    Default,
-    /// Custome DPI scaling, e.g: 0.8, 1.5, 2.0 and so fort.
-    Custom(f32),
 }
 
 /// The default cursor
@@ -187,6 +165,8 @@ pub struct EguiState {
     pub pixels_per_point: f32,
     pub screen_rect: egui::Rect,
     pub clipboard: Clipboard,
+    pub scroll_factor: f32,
+    pub zoom_factor: f32,
     _mouse_btn_pressed: bool,
 }
 
@@ -207,7 +187,11 @@ impl EguiState {
     }
 
     /// Convenience method for outputting what egui emits each frame
-    pub fn fuse_output(&mut self, win: &mut fltk::window::Window, egui_output: &egui::Output) {
+    pub fn fuse_output(
+        &mut self,
+        win: &mut fltk::window::Window,
+        egui_output: egui::PlatformOutput,
+    ) {
         let copied_text = &egui_output.copied_text;
         if !copied_text.is_empty() {
             self.clipboard.set(copied_text.into());
@@ -349,25 +333,43 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
         }
 
         enums::Event::MouseWheel => {
-            if app::is_event_command() {
-                let zoom_factor = 1.2;
+            if app::is_event_ctrl() {
+                let zoom_factor = state.zoom_factor;
                 match app::event_dy() {
                     app::MouseWheel::Up => {
-                        state.input.zoom_delta /= zoom_factor;
+                        let delta = egui::vec2(1., -1.) * zoom_factor;
+
+                        // Treat as zoom in:
+                        state
+                            .input
+                            .events
+                            .push(Event::Zoom((delta.y / 200.0).exp()));
                     }
                     app::MouseWheel::Down => {
-                        state.input.zoom_delta *= zoom_factor;
+                        let delta = egui::vec2(-1., 1.) * zoom_factor;
+
+                        // Treat as zoom out:
+                        state
+                            .input
+                            .events
+                            .push(Event::Zoom((delta.y / 200.0).exp()));
                     }
                     _ => (),
                 }
             } else {
-                let scroll_factor = 15.0;
+                let scroll_factor = state.scroll_factor;
                 match app::event_dy() {
                     app::MouseWheel::Up => {
-                        state.input.scroll_delta.y -= scroll_factor;
+                        state.input.events.push(Event::Scroll(Vec2 {
+                            x: 0.,
+                            y: -scroll_factor,
+                        }));
                     }
                     app::MouseWheel::Down => {
-                        state.input.scroll_delta.y += scroll_factor;
+                        state.input.events.push(Event::Scroll(Vec2 {
+                            x: 0.,
+                            y: scroll_factor,
+                        }));
                     }
                     _ => (),
                 }
@@ -479,322 +481,6 @@ pub fn translate_cursor(
     }
 }
 
-/// Low level converter for fltk::image
-pub trait ImgWidgetConvert {
-    /// Convert fltk Image to Egui Image Widget.
-    ///
-    /// label: Debug label of the texture. This will show up in graphics debuggers for easy identification.
-    fn to_img_widget(
-        self,
-        painter: &mut Painter,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        label: &str,
-    ) -> Result<ImgWidget, FltkError>;
-}
-
-impl<I> ImgWidgetConvert for I
-where
-    I: ImageExt,
-{
-    fn to_img_widget(
-        self,
-        painter: &mut Painter,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        label: &str,
-    ) -> Result<ImgWidget, FltkError> {
-        let (width, height) = (self.data_w() as usize, self.data_h() as usize);
-        let render_pass = &mut painter.render_pass;
-        let texture_id;
-        {
-            let size = wgpu::Extent3d {
-                width: width as u32,
-                height: height as u32,
-                depth_or_array_layers: 1,
-            };
-
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(format!("{}_texture", label).as_str()),
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            });
-            texture_id = render_pass.egui_texture_from_wgpu_texture(
-                device,
-                &texture,
-                wgpu::FilterMode::Linear,
-            );
-            let pixels = self
-                .to_rgb()?
-                .convert(enums::ColorDepth::Rgba8)?
-                .to_rgb_data();
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                pixels.as_slice(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: NonZeroU32::new((pixels.len() / height) as u32),
-                    rows_per_image: NonZeroU32::new(height as u32),
-                },
-                size,
-            );
-        }
-        let image = ImgWidget::new(texture_id, egui::vec2(width as f32, height as f32));
-        Ok(image)
-    }
-}
-
-/// Egui Image Widget
-pub struct ImgWidget {
-    _texture_id: egui::TextureId,
-    _size: Vec2,
-}
-
-impl Drop for ImgWidget {
-    fn drop(&mut self) {}
-}
-
-/// High level converter for fltk::image
-pub trait ImgWidgetExt {
-    /// Convert into ImgWidget
-    fn into_img_widget(self, frame: &mut epi::Frame<'_>) -> Option<ImgWidget>;
-}
-
-impl<I: ImageExt> ImgWidgetExt for I {
-    fn into_img_widget(self, frame: &mut epi::Frame<'_>) -> Option<ImgWidget> {
-        ImgWidget::from_fltk_image(self, frame)
-    }
-}
-
-impl ImgWidget {
-    pub fn texture_id(&self) -> TextureId {
-        self._texture_id
-    }
-
-    pub fn size(&self) -> Vec2 {
-        self._size
-    }
-
-    pub fn widget(&self) -> egui::Image {
-        egui::Image::new(self._texture_id, self._size)
-    }
-
-    pub fn resize(&mut self, x: f32, y: f32) {
-        self._size.x = x;
-        self._size.y = y;
-    }
-
-    pub fn set_size_x(&mut self, x: f32) {
-        self._size.x = x;
-    }
-
-    pub fn set_size_y(&mut self, y: f32) {
-        self._size.y = y;
-    }
-
-    pub fn get_size_x(&self) -> f32 {
-        self._size.x
-    }
-
-    pub fn get_size_y(&self) -> f32 {
-        self._size.y
-    }
-
-    pub fn new(texture_id: TextureId, size: Vec2) -> Self {
-        Self {
-            _texture_id: texture_id,
-            _size: size,
-        }
-    }
-
-    /// Currently Support all fltk images, except SVG.
-    pub fn from_fltk_image<I: ImageExt>(
-        fltk_image: I,
-        frame: &mut epi::Frame<'_>,
-    ) -> Option<ImgWidget> {
-        let w = fltk_image.width() as usize;
-        let h = fltk_image.height() as usize;
-        let rgb_image = match fltk_image.to_rgb() {
-            Ok(rgb_image) => rgb_image,
-            _ => return None,
-        };
-
-        let converted_rgb = match rgb_image.convert(enums::ColorDepth::Rgba8) {
-            Ok(converted_rgb) => converted_rgb,
-            _ => return None,
-        };
-
-        let texture_id;
-        {
-            let pixels: Vec<egui::Color32> = converted_rgb
-                .to_rgb_data()
-                .chunks_exact(4)
-                .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
-                .collect();
-            texture_id = frame
-                .tex_allocator()
-                .alloc_srgba_premultiplied((w, h), &pixels);
-        }
-        let image = ImgWidget::new(
-            texture_id,
-            egui::Vec2 {
-                x: w as f32,
-                y: h as f32,
-            },
-        );
-        Some(image)
-    }
-
-    /// Same as from_fltk_image, only take ImageExt as ref.
-    pub fn from_fltk_image_ref(
-        fltk_image: &dyn ImageExt,
-        frame: &mut epi::Frame<'_>,
-    ) -> Option<ImgWidget> {
-        let w = fltk_image.width() as usize;
-        let h = fltk_image.height() as usize;
-        let rgb_image = match fltk_image.to_rgb() {
-            Ok(rgb_image) => rgb_image,
-            _ => return None,
-        };
-
-        let converted_rgb = match rgb_image.convert(enums::ColorDepth::Rgba8) {
-            Ok(converted_rgb) => converted_rgb,
-            _ => return None,
-        };
-
-        let texture_id;
-        {
-            let pixels: Vec<egui::Color32> = converted_rgb
-                .to_rgb_data()
-                .chunks_exact(4)
-                .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
-                .collect();
-            texture_id = frame
-                .tex_allocator()
-                .alloc_srgba_premultiplied((w, h), &pixels);
-        }
-        let image = ImgWidget::new(
-            texture_id,
-            egui::Vec2 {
-                x: w as f32,
-                y: h as f32,
-            },
-        );
-        Some(image)
-    }
-
-    #[cfg(feature = "svg")]
-    /// Using resvg, usvg and tiny-skia under the hood.
-    pub fn from_svg_data(
-        bytes: &[u8],
-        opt_ref: OptionsRef,
-        frame: &mut epi::Frame<'_>,
-    ) -> std::io::Result<ImgWidget> {
-        let rtree = match Tree::from_data(bytes, &opt_ref) {
-            Ok(rtree) => rtree,
-            Err(e) => {
-                let err = Error::new(ErrorKind::Other, e.to_string());
-                return Err(err);
-            }
-        };
-        let tex;
-        let size;
-        {
-            let pixmap_size = rtree.svg_node().size.to_screen_size();
-            let mut pixmap = match Pixmap::new(pixmap_size.width(), pixmap_size.height()) {
-                Some(pixmap) => pixmap,
-                _ => {
-                    let err = Error::new(ErrorKind::Other, "while mapping SVG pixels!");
-                    return Err(err);
-                }
-            };
-
-            {
-                if render(&rtree, usvg::FitTo::Original, pixmap.as_mut()).is_none() {
-                    let err = Error::new(ErrorKind::Other, "while rendering SVG data!");
-                    return Err(err);
-                }
-            }
-            size = (pixmap_size.width() as usize, pixmap_size.height() as usize);
-            let pixels: Vec<egui::Color32> = pixmap
-                .data()
-                .chunks_exact(4)
-                .map(|p| egui::Color32::from_rgba_unmultiplied(p[0], p[1], p[2], p[3]))
-                .collect();
-            tex = frame
-                .tex_allocator()
-                .alloc_srgba_premultiplied(size, &pixels);
-        }
-        let feimage = ImgWidget {
-            _texture_id: tex,
-            _size: Vec2::from((size.0 as f32, size.1 as f32)),
-        };
-        Ok(feimage)
-    }
-
-    /// label: Debug label of the texture. This will show up in graphics debuggers for easy identification.
-    pub fn from_rgba8(
-        pixels: &[u8],
-        width: u32,
-        height: u32,
-        painter: &mut Painter,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        label: &str,
-    ) -> Result<Self, FltkError> {
-        let render_pass = &mut painter.render_pass;
-        let texture_id;
-        {
-            let size = wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            };
-
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some(format!("{}_texture", label).as_str()),
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            });
-            texture_id = render_pass.egui_texture_from_wgpu_texture(
-                device,
-                &texture,
-                wgpu::FilterMode::Linear,
-            );
-            queue.write_texture(
-                wgpu::ImageCopyTexture {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                pixels,
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: NonZeroU32::new((pixels.len() as u32 / height) as u32),
-                    rows_per_image: NonZeroU32::new(height as u32),
-                },
-                size,
-            );
-        }
-        let image = ImgWidget::new(texture_id, egui::vec2(width as f32, height as f32));
-        Ok(image)
-    }
-}
-
 /// Compat for epi::App impl trait
 pub struct Compat {
     setup: bool,
@@ -847,67 +533,107 @@ impl Timer {
     }
 }
 
-/// Compat trait ext for RawWindowHandle 4.x
-///
-pub trait RWHandleExt {
-    /// use raw-window-handle 4.x compatible
-    fn use_compat(&self) -> RwhCompat;
+pub trait EguiImageConvertible<I>
+where
+    I: ImageExt,
+{
+    fn egui_image(self, debug_name: &str) -> Result<RetainedImage, FltkError>;
 }
 
-impl RWHandleExt for fltk::window::Window {
-    fn use_compat(&self) -> RwhCompat {
-        RwhCompat(self.raw_handle())
+impl<I> EguiImageConvertible<I> for I
+where
+    I: ImageExt,
+{
+    /// Return (egui_extras::RetainedImage)
+    fn egui_image(self, debug_name: &str) -> Result<RetainedImage, FltkError> {
+        let size = [self.data_w() as usize, self.data_h() as usize];
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(
+            size,
+            &self
+                .to_rgb()?
+                .convert(enums::ColorDepth::Rgba8)?
+                .to_rgb_data(),
+        );
+
+        Ok(RetainedImage::from_color_image(debug_name, color_image))
     }
 }
 
-/// Compat for RawWindowHandle 4.x
-///
-pub struct RwhCompat(fltk::window::RawHandle);
+pub trait EguiSvgConvertible {
+    fn egui_svg_image(self, debug_name: &str) -> Result<RetainedImage, FltkError>;
+}
 
-unsafe impl raw_window_handle::HasRawWindowHandle for RwhCompat {
-    fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
-        #[cfg(target_os = "windows")]
-        {
-            let mut handle = raw_window_handle::Win32Handle::empty();
-            handle.hwnd = self.0;
-            handle.hinstance = fltk::app::display();
-            return raw_window_handle::RawWindowHandle::Win32(handle);
-        }
+impl EguiSvgConvertible for fltk::image::SvgImage {
+    /// Return (egui_extras::RetainedImage)
+    fn egui_svg_image(mut self, debug_name: &str) -> Result<RetainedImage, FltkError> {
+        self.normalize();
+        let size = [self.data_w() as usize, self.data_h() as usize];
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(
+            size,
+            &self
+                .to_rgb()?
+                .convert(enums::ColorDepth::Rgba8)?
+                .to_rgb_data(),
+        );
 
-        #[cfg(target_os = "macos")]
-        {
-            use std::os::raw::c_void;
-
-            let raw = self.0;
-            extern "C" {
-                pub fn cfltk_getContentView(xid: *mut c_void) -> *mut c_void;
-            }
-            let cv = unsafe { cfltk_getContentView(raw) };
-            let mut handle = raw_window_handle::AppKitHandle::empty();
-            handle.ns_window = raw;
-            handle.ns_view = cv as _;
-            return raw_window_handle::RawWindowHandle::AppKit(handle);
-        }
-
-        #[cfg(target_os = "android")]
-        {
-            let mut handle = raw_window_handle::AndroidNdkHandle::empty();
-            handle.a_native_window = self.0;
-            return raw_window_handle::RawWindowHandle::AndroidNdk(handle);
-        }
-
-        #[cfg(any(
-            target_os = "linux",
-            target_os = "dragonfly",
-            target_os = "freebsd",
-            target_os = "netbsd",
-            target_os = "openbsd",
-        ))]
-        {
-            let mut handle = raw_window_handle::XlibHandle::empty();
-            handle.window = self.0;
-            handle.display = fltk::app::display();
-            return raw_window_handle::RawWindowHandle::Xlib(handle);
-        }
+        Ok(RetainedImage::from_color_image(debug_name, color_image))
     }
+}
+
+/// egui::TextureHandle from Vec egui::Color32
+pub fn tex_handle_from_vec_color32(
+    ctx: &egui::Context,
+    debug_name: &str,
+    vec: Vec<egui::Color32>,
+    size: [usize; 2],
+) -> egui::TextureHandle {
+    let mut pixels: Vec<u8> = Vec::with_capacity(vec.len() * 4);
+    vec.into_iter().for_each(|x| {
+        pixels.push(x[0]);
+        pixels.push(x[1]);
+        pixels.push(x[2]);
+        pixels.push(x[3]);
+    });
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+    ctx.load_texture(debug_name, color_image)
+}
+
+/// egui::TextureHandle from slice of egui::Color32
+pub fn tex_handle_from_color32_slice(
+    ctx: &egui::Context,
+    debug_name: &str,
+    slice: &[egui::Color32],
+    size: [usize; 2],
+) -> egui::TextureHandle {
+    let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
+    slice.into_iter().for_each(|x| {
+        pixels.push(x[0]);
+        pixels.push(x[1]);
+        pixels.push(x[2]);
+        pixels.push(x[3]);
+    });
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+    ctx.load_texture(debug_name, color_image)
+}
+
+/// egui::TextureHandle from slice of u8
+pub fn tex_handle_from_u8_slice(
+    ctx: &egui::Context,
+    debug_name: &str,
+    slice: &[u8],
+    size: [usize; 2],
+) -> egui::TextureHandle {
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, slice);
+    ctx.load_texture(debug_name, color_image)
+}
+
+/// egui::TextureHandle from Vec u8
+pub fn tex_handle_from_vec_u8(
+    ctx: &egui::Context,
+    debug_name: &str,
+    vec: Vec<u8>,
+    size: [usize; 2],
+) -> egui::TextureHandle {
+    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, vec.as_slice());
+    ctx.load_texture(debug_name, color_image)
 }
