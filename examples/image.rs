@@ -10,7 +10,7 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    EguiImageConvertible, EguiSvgConvertible, Timer,
+    EguiImageConvertible, RetainedEguiImage, Timer,
 };
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
@@ -21,7 +21,7 @@ fn main() {
     let mut window = window::Window::default()
         .with_size(800, 600)
         .center_screen();
-    window.set_label("Demo Window");
+    window.set_label("Image Demo Window");
     window.make_resizable(true);
     window.end();
     window.show();
@@ -99,13 +99,15 @@ fn main() {
     let egui_ctx = Rc::new(RefCell::new(egui::Context::default()));
     let start_time = Instant::now();
 
+    // egui image from fltk svg
+    let fltk_svg_image = SvgImage::load("examples/resources/fingerprint.svg").unwrap();
+    let retained_egui_svg_image =
+        RetainedEguiImage::from_fltk_svg_image("fingerprint.svg", fltk_svg_image).unwrap();
+
+    // fltk image to egui image
     let retained_egui_image = JpegImage::load("examples/resources/nature.jpg")
         .unwrap()
         .egui_image("nature.jpg")
-        .unwrap();
-    let retained_egui_image_svg = SvgImage::load("examples/resources/fingerprint.svg")
-        .unwrap()
-        .egui_svg_image("fingerprint.svg")
         .unwrap();
 
     // Use Timer for auto repaint if the app is idle.
@@ -115,7 +117,7 @@ fn main() {
 
     while fltk_app.wait() {
         let mut state = state.borrow_mut();
-        let egui_ctx = egui_ctx.borrow_mut();
+        let egui_ctx = egui_ctx.borrow();
         let mut device = device.borrow_mut();
         let mut queue = queue.borrow_mut();
         let start_time = start_time.elapsed().as_secs_f64();
@@ -127,7 +129,7 @@ fn main() {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.add(Label::new("this is fingerprint.svg"));
-                        retained_egui_image_svg.show(ui);
+                        retained_egui_svg_image.show(ui);
                         ui.add(Label::new("this is nature.jpg"));
                         retained_egui_image.show(ui);
                         if ui

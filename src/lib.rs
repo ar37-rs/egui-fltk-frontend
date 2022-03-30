@@ -1,7 +1,6 @@
 pub use egui;
 use egui::{CursorIcon, Event, Vec2};
-pub use egui_extras;
-use egui_extras::RetainedImage;
+pub use egui_image::RetainedEguiImage;
 use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
 pub use fltk;
 use fltk::{
@@ -11,6 +10,7 @@ use fltk::{
 };
 use std::{iter, time::Instant};
 mod clipboard;
+mod egui_image;
 use clipboard::Clipboard;
 
 /// Construct the frontend.
@@ -118,6 +118,7 @@ impl Painter {
                 Some(wgpu::Color::BLACK),
             )
             .unwrap();
+        render_pass.remove_textures(texture).unwrap();
         // Submit the commands.
         queue.submit(iter::once(encoder.finish()));
         output_frame.present();
@@ -533,15 +534,15 @@ pub trait EguiImageConvertible<I>
 where
     I: ImageExt,
 {
-    fn egui_image(self, debug_name: &str) -> Result<RetainedImage, FltkError>;
+    fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError>;
 }
 
 impl<I> EguiImageConvertible<I> for I
 where
     I: ImageExt,
 {
-    /// Return (egui_extras::RetainedImage)
-    fn egui_image(self, debug_name: &str) -> Result<RetainedImage, FltkError> {
+    /// Return (egui_extras::RetainedEguiImage)
+    fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
         let size = [self.data_w() as usize, self.data_h() as usize];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
@@ -551,17 +552,17 @@ where
                 .to_rgb_data(),
         );
 
-        Ok(RetainedImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
     }
 }
 
 pub trait EguiSvgConvertible {
-    fn egui_svg_image(self, debug_name: &str) -> Result<RetainedImage, FltkError>;
+    fn egui_svg_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError>;
 }
 
 impl EguiSvgConvertible for fltk::image::SvgImage {
-    /// Return (egui_extras::RetainedImage)
-    fn egui_svg_image(mut self, debug_name: &str) -> Result<RetainedImage, FltkError> {
+    /// Return (egui_extras::RetainedEguiImage)
+    fn egui_svg_image(mut self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
         self.normalize();
         let size = [self.data_w() as usize, self.data_h() as usize];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
@@ -572,7 +573,7 @@ impl EguiSvgConvertible for fltk::image::SvgImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
     }
 }
 

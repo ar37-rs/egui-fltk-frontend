@@ -2,7 +2,7 @@ use backend::wgpu;
 use egui_fltk_frontend as frontend;
 use egui_wgpu_backend as backend;
 use frontend::{
-    egui::{self, Label},
+    egui,
     fltk::{
         app,
         enums::Event,
@@ -123,11 +123,6 @@ fn main() {
 
                         let app_output = egui_ctx.run(state.input.take(), |ctx| {
                             demo_app.ui(ctx);
-                            egui::CentralPanel::default().show(&ctx, |ui| {
-                                egui::ScrollArea::vertical().show(ui, |ui| {
-                                    ui.add(Label::new("this is crates.svg badge"));
-                                });
-                            });
                         });
 
                         state.fuse_output(win, app_output.platform_output);
@@ -153,7 +148,7 @@ fn main() {
     while fltk_app.wait() {
         let mut state = state.borrow_mut();
         let mut painter = painter.borrow_mut();
-        let egui_ctx = egui_ctx.borrow_mut();
+        let egui_ctx = egui_ctx.borrow();
         let mut device = device.borrow_mut();
         let mut queue = queue.borrow_mut();
         // Draw the demo application.
