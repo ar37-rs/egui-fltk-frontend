@@ -26,11 +26,11 @@ sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev lib
 
 ## Usage
 
-On wayland desktop disable default-features:
+On wayland desktop enable-features:
 
 ```toml
 [dependencies]
-egui-fltk-frontend = { version = "0.17", default-features = false,  features = ["wayland"] }
+egui-fltk-frontend = { version = "0.17",  features = ["wayland"] }
 ```
 
 ## Example
