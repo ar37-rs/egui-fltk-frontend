@@ -157,7 +157,7 @@ fn main() {
         let start_time = start_time.elapsed().as_secs_f64();
         state.input.time = Some(start_time);
 
-        let app_output = egui_ctx.run(state.input.take(), |ctx| {
+        let app_output = egui_ctx.run(state.take_input(), |ctx| {
             demo_app.ui(ctx);
         });
 

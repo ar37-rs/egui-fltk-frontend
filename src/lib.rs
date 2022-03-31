@@ -1,5 +1,5 @@
 pub use egui;
-use egui::{CursorIcon, Event, Vec2};
+use egui::{pos2, vec2, CursorIcon, Event, Rect, Vec2};
 pub use egui_image::RetainedEguiImage;
 use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
 pub use fltk;
@@ -21,10 +21,10 @@ pub fn begin_with(
     surface_config: wgpu::SurfaceConfiguration,
 ) -> (Painter, EguiState) {
     app::set_screen_scale(window.screen_num(), 1.0);
-    let scale = window.pixels_per_unit();
+    let ppu = window.pixels_per_unit();
     let x = window.width();
     let y = window.height();
-    let rect = egui::vec2(x as f32, y as f32) / scale;
+    let rect = egui::vec2(x as f32, y as f32) / ppu;
     let screen_rect = egui::Rect::from_min_size(egui::Pos2::new(0f32, 0f32), rect);
 
     let painter = Painter {
@@ -32,34 +32,25 @@ pub fn begin_with(
         surface,
         surface_config,
     };
+
     let state = EguiState {
         _window_resized: false,
         fuse_cursor: FusedCursor::new(),
-        pointer_pos: egui::Pos2::new(0f32, 0f32),
+        pointer_pos: egui::Pos2::new(0.0, 0.0),
         input: egui::RawInput {
             screen_rect: Some(screen_rect),
-            pixels_per_point: Some(scale),
+            pixels_per_point: Some(ppu),
             ..Default::default()
         },
-        modifiers: egui::Modifiers::default(),
         physical_width: x as u32,
         physical_height: y as u32,
-        pixels_per_point: scale,
-        screen_rect,
+        _pixels_per_point: ppu,
         clipboard: clipboard::Clipboard::default(),
         _mouse_btn_pressed: false,
-        scroll_factor: 12.,
-        zoom_factor: 8.,
+        scroll_factor: 12.0,
+        zoom_factor: 8.0,
     };
     (painter, state)
-}
-
-pub struct Signal;
-
-impl Default for Signal {
-    fn default() -> Self {
-        Self {}
-    }
 }
 
 pub struct Painter {
@@ -80,16 +71,16 @@ impl Painter {
         // Upload all resources for the GPU.
         let screen_descriptor;
         {
-            let surface_config = &mut self.surface_config;
             let width = state.physical_width;
             let height = state.physical_height;
+            let surface_config = &mut self.surface_config;
             surface_config.width = width;
             surface_config.height = height;
             self.surface.configure(&device, surface_config);
             screen_descriptor = ScreenDescriptor {
                 physical_width: width,
                 physical_height: height,
-                scale_factor: state.pixels_per_point,
+                scale_factor: state.pixels_per_point(),
             }
         };
         // Record all render passes.
@@ -100,27 +91,29 @@ impl Painter {
                 return;
             }
         };
-        let output_view = output_frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("encoder"),
-        });
-        let render_pass = &mut self.render_pass;
-        render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
-        render_pass.add_textures(&device, &queue, &texture).unwrap();
-        render_pass
-            .execute(
-                &mut encoder,
-                &output_view,
-                &clipped_mesh,
-                &screen_descriptor,
-                Some(wgpu::Color::BLACK),
-            )
-            .unwrap();
-        render_pass.remove_textures(texture).unwrap();
-        // Submit the commands.
-        queue.submit(iter::once(encoder.finish()));
+
+        {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("encoder"),
+            });
+            let render_pass = &mut self.render_pass;
+            render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
+            render_pass.add_textures(&device, &queue, &texture).unwrap();
+            render_pass
+                .execute(
+                    &mut encoder,
+                    &output_frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                    &clipped_mesh,
+                    &screen_descriptor,
+                    Some(wgpu::Color::BLACK),
+                )
+                .unwrap();
+            render_pass.remove_textures(texture).unwrap();
+            // Submit the commands.
+            queue.submit(iter::once(encoder.finish()));
+        }
         output_frame.present();
     }
 }
@@ -156,13 +149,13 @@ pub struct EguiState {
     pub fuse_cursor: FusedCursor,
     pub pointer_pos: egui::Pos2,
     pub input: egui::RawInput,
-    pub modifiers: egui::Modifiers,
     pub physical_width: u32,
     pub physical_height: u32,
-    pub pixels_per_point: f32,
-    pub screen_rect: egui::Rect,
+    pub _pixels_per_point: f32,
     pub clipboard: Clipboard,
+    // default value is 12.0
     pub scroll_factor: f32,
+    // default value is 8.0
     pub zoom_factor: f32,
     _mouse_btn_pressed: bool,
 }
@@ -196,30 +189,40 @@ impl EguiState {
         translate_cursor(win, &mut self.fuse_cursor, egui_output.cursor_icon);
     }
 
-    /// Updates the screen rect
-    pub fn update_screen_rect(&mut self, x: i32, y: i32) {
-        let rect = egui::vec2(x as f32, y as f32) / self.pixels_per_point;
-        self.screen_rect = egui::Rect::from_min_size(Default::default(), rect);
+    /// Set visual scale, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
+    pub fn set_visual_scale(&mut self, size: f32) {
+        // have to be setted the pixels_per_point of both the inner (input) and the state.
+        self.input.pixels_per_point = Some(size);
+        self._pixels_per_point = size;
+
+        // resize rect with physical dimention size.
+        let rect = vec2(self.physical_width as f32, self.physical_height as f32) / size;
+        self.input.screen_rect = Some(Rect::from_min_size(Default::default(), rect));
     }
 
-    pub fn update_screen_rect_size(&mut self, size: egui::Vec2) {
-        self.screen_rect =
-            egui::Rect::from_min_size(Default::default(), size * self.pixels_per_point);
+    pub fn pixels_per_point(&self) -> f32 {
+        self._pixels_per_point
+    }
+
+    /// Don't use state.input.take() use this fn instead (to avoid pixels per point miscalculation).
+    pub fn take_input(&mut self) -> egui::RawInput {
+        let pixels_per_point = self.input.pixels_per_point;
+        let take = self.input.take();
+        self.input.pixels_per_point = pixels_per_point;
+        if let Some(ppp) = pixels_per_point {
+            self._pixels_per_point = ppp;
+        }
+        take
     }
 }
 
 /// Handles input/events from FLTK
 pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state: &mut EguiState) {
-    let (x, y) = app::event_coords();
-    let pixels_per_point = state.pixels_per_point;
     match event {
         enums::Event::Resize => {
-            let width = win.width();
-            let height = win.height();
-            state.physical_width = width as u32;
-            state.physical_height = height as u32;
-            state.update_screen_rect(width, height);
-            state.input.screen_rect = Some(state.screen_rect);
+            state.physical_width = win.width() as u32;
+            state.physical_height = win.height() as u32;
+            state.set_visual_scale(state.pixels_per_point());
             state._window_resized = true;
         }
         //MouseButonLeft pressed is the only one needed by egui
@@ -236,7 +239,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     pos: state.pointer_pos,
                     button: pressed,
                     pressed: true,
-                    modifiers: state.modifiers,
+                    modifiers: state.input.modifiers,
                 });
             }
         }
@@ -256,24 +259,25 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                     pos: state.pointer_pos,
                     button: released,
                     pressed: false,
-                    modifiers: state.modifiers,
+                    modifiers: state.input.modifiers,
                 });
             }
         }
 
         enums::Event::Move | enums::Event::Drag => {
-            state.pointer_pos =
-                egui::pos2(x as f32 / pixels_per_point, y as f32 / pixels_per_point);
+            let (x, y) = app::event_coords();
+            let ppp = state.pixels_per_point();
+            state.pointer_pos = pos2(x as f32 / ppp, y as f32 / ppp);
             state
                 .input
                 .events
-                .push(egui::Event::PointerMoved(state.pointer_pos));
+                .push(egui::Event::PointerMoved(state.pointer_pos))
         }
 
         enums::Event::KeyUp => {
             if let Some(key) = translate_virtual_key_code(app::event_key()) {
                 let keymod = app::event_state();
-                state.modifiers = egui::Modifiers {
+                state.input.modifiers = egui::Modifiers {
                     alt: (keymod & enums::EventState::Alt == enums::EventState::Alt),
                     ctrl: (keymod & enums::EventState::Ctrl == enums::EventState::Ctrl),
                     shift: (keymod & enums::EventState::Shift == enums::EventState::Shift),
@@ -285,7 +289,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                 state.input.events.push(egui::Event::Key {
                     key,
                     pressed: false,
-                    modifiers: state.modifiers,
+                    modifiers: state.input.modifiers,
                 });
             }
         }
@@ -301,7 +305,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
             }
             if let Some(key) = translate_virtual_key_code(app::event_key()) {
                 let keymod = app::event_state();
-                state.modifiers = egui::Modifiers {
+                state.input.modifiers = egui::Modifiers {
                     alt: (keymod & enums::EventState::Alt == enums::EventState::Alt),
                     ctrl: (keymod & enums::EventState::Ctrl == enums::EventState::Ctrl),
                     shift: (keymod & enums::EventState::Shift == enums::EventState::Shift),
@@ -313,15 +317,15 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                 state.input.events.push(egui::Event::Key {
                     key,
                     pressed: true,
-                    modifiers: state.modifiers,
+                    modifiers: state.input.modifiers,
                 });
-                if state.modifiers.command && key == egui::Key::C {
+                if state.input.modifiers.command && key == egui::Key::C {
                     // println!("copy event");
                     state.input.events.push(egui::Event::Copy);
-                } else if state.modifiers.command && key == egui::Key::X {
+                } else if state.input.modifiers.command && key == egui::Key::X {
                     // println!("cut event");
                     state.input.events.push(egui::Event::Cut);
-                } else if state.modifiers.command && key == egui::Key::V {
+                } else if state.input.modifiers.command && key == egui::Key::V {
                     if let Some(value) = state.clipboard.get() {
                         state.input.events.push(egui::Event::Text(value));
                     }
@@ -334,7 +338,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                 let zoom_factor = state.zoom_factor;
                 match app::event_dy() {
                     app::MouseWheel::Up => {
-                        let delta = egui::vec2(1., -1.) * zoom_factor;
+                        let delta = vec2(1., -1.) * zoom_factor;
 
                         // Treat as zoom in:
                         state
@@ -343,7 +347,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
                             .push(Event::Zoom((delta.y / 200.0).exp()));
                     }
                     app::MouseWheel::Down => {
-                        let delta = egui::vec2(-1., 1.) * zoom_factor;
+                        let delta = vec2(-1., 1.) * zoom_factor;
 
                         // Treat as zoom out:
                         state
