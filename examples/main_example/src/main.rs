@@ -114,13 +114,10 @@ fn main() {
                 if state.window_resized() {
                     win.clear_damage();
                     if let Ok(mut painter) = painter.try_borrow_mut() {
-                        let egui_ctx = egui_ctx.borrow();
-                        let mut device = device.borrow_mut();
-                        let mut queue = queue.borrow_mut();
-                        let mut demo_app = demo_app.borrow_mut();
                         let start_time = start_time.elapsed().as_secs_f64();
                         state.input.time = Some(start_time);
-
+                        let egui_ctx = egui_ctx.borrow();
+                        let mut demo_app = demo_app.borrow_mut();
                         let app_output = egui_ctx.run(state.input.take(), |ctx| {
                             demo_app.ui(ctx);
                         });
@@ -129,8 +126,8 @@ fn main() {
                         let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
                         let texture = app_output.textures_delta;
                         painter.paint_jobs(
-                            &mut device,
-                            &mut queue,
+                            &device.borrow(),
+                            &queue.borrow(),
                             &mut state,
                             clipped_mesh,
                             texture,
