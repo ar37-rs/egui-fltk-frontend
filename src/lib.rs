@@ -62,8 +62,8 @@ pub struct Painter {
 impl Painter {
     pub fn paint_jobs(
         &mut self,
-        device: &mut wgpu::Device,
-        queue: &mut wgpu::Queue,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
         state: &mut EguiState,
         clipped_mesh: Vec<egui::ClippedMesh>,
         texture: egui::TexturesDelta,
@@ -76,7 +76,7 @@ impl Painter {
             let surface_config = &mut self.surface_config;
             surface_config.width = width;
             surface_config.height = height;
-            self.surface.configure(&device, surface_config);
+            self.surface.configure(device, surface_config);
             screen_descriptor = ScreenDescriptor {
                 physical_width: width,
                 physical_height: height,
@@ -98,7 +98,7 @@ impl Painter {
             });
             let render_pass = &mut self.render_pass;
             render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
-            render_pass.add_textures(&device, &queue, &texture).unwrap();
+            render_pass.add_textures(device, queue, &texture).unwrap();
             render_pass
                 .execute(
                     &mut encoder,
@@ -607,7 +607,7 @@ pub fn tex_handle_from_color32_slice(
     size: [usize; 2],
 ) -> egui::TextureHandle {
     let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
-    slice.into_iter().for_each(|x| {
+    slice.iter().for_each(|x| {
         pixels.push(x[0]);
         pixels.push(x[1]);
         pixels.push(x[2]);

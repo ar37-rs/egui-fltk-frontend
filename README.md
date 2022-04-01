@@ -1,7 +1,7 @@
 # Egui FLTK Frontend
 
 [![Crates.io](https://img.shields.io/crates/v/egui-fltk-frontend.svg)](https://crates.io/crates/egui-fltk-frontend)
-![minimum rustc 1.59.0](https://img.shields.io/badge/rustc-1.59.0+-orange.svg)
+![minimum rustc 1.56.0](https://img.shields.io/badge/rustc-1.56.0+-blue.svg)
 [![Documentation](https://docs.rs/egui-fltk-frontend/badge.svg)](https://docs.rs/egui-fltk-frontend)
 [![CI](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml)
 

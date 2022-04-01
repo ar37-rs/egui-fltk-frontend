@@ -149,8 +149,8 @@ fn main() {
         let mut state = state.borrow_mut();
         let mut painter = painter.borrow_mut();
         let egui_ctx = egui_ctx.borrow();
-        let mut device = device.borrow_mut();
-        let mut queue = queue.borrow_mut();
+        let device = device.borrow_mut();
+        let queue = queue.borrow_mut();
         // Draw the demo application.
         let mut demo_app = demo_app.borrow_mut();
 
@@ -175,7 +175,7 @@ fn main() {
             state.fuse_output(&mut window, app_output.platform_output);
             let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&mut device, &mut queue, &mut state, clipped_mesh, texture);
+            painter.paint_jobs(&device, &queue, &mut state, clipped_mesh, texture);
         }
         app::awake();
     }

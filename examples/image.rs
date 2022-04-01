@@ -118,8 +118,8 @@ fn main() {
     while fltk_app.wait() {
         let mut state = state.borrow_mut();
         let egui_ctx = egui_ctx.borrow();
-        let mut device = device.borrow_mut();
-        let mut queue = queue.borrow_mut();
+        let device = device.borrow_mut();
+        let queue = queue.borrow_mut();
         let start_time = start_time.elapsed().as_secs_f64();
         state.input.time = Some(start_time);
 
@@ -157,7 +157,7 @@ fn main() {
             state.fuse_output(&mut window, app_output.platform_output);
             let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&mut device, &mut queue, &mut state, clipped_mesh, texture);
+            painter.paint_jobs(&device, &queue, &mut state, clipped_mesh, texture);
         } else if quit {
             break;
         }
