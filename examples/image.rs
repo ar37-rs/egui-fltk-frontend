@@ -118,8 +118,8 @@ fn main() {
     while fltk_app.wait() {
         let mut state = state.borrow_mut();
         let egui_ctx = egui_ctx.borrow();
-        let device = device.borrow_mut();
-        let queue = queue.borrow_mut();
+        let device = device.borrow();
+        let queue = queue.borrow();
         let start_time = start_time.elapsed().as_secs_f64();
         state.input.time = Some(start_time);
 

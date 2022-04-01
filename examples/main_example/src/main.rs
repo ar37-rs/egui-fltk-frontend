@@ -149,8 +149,8 @@ fn main() {
         let mut state = state.borrow_mut();
         let mut painter = painter.borrow_mut();
         let egui_ctx = egui_ctx.borrow();
-        let device = device.borrow_mut();
-        let queue = queue.borrow_mut();
+        let device = device.borrow();
+        let queue = queue.borrow();
         // Draw the demo application.
         let mut demo_app = demo_app.borrow_mut();
 
