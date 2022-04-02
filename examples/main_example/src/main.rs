@@ -26,6 +26,7 @@ fn main() {
     window.show();
     window.make_current();
 
+    // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
 
@@ -47,10 +48,10 @@ fn main() {
     ))
     .unwrap();
 
-    let surface_format = surface.get_preferred_format(&adapter).unwrap();
+    let texture_format = wgpu::TextureFormat::Bgra8UnormSrgb;
     let surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_format,
+        format: texture_format,
         width: window.width() as u32,
         height: window.height() as u32,
         present_mode: wgpu::PresentMode::Mailbox,
@@ -59,8 +60,9 @@ fn main() {
     surface.configure(&device, &surface_config);
 
     // Prepare back and front.
-    let render_pass = backend::RenderPass::new(&device, surface_format, 1);
-    let (painter, state) = frontend::begin_with(&mut window, render_pass, surface, surface_config);
+    let render_pass = backend::RenderPass::new(&device, texture_format, 1);
+    let (painter, state) =
+        frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -91,8 +93,8 @@ fn main() {
     });
 
     // We use the egui_wgpu_backend crate as the render backend.
-    let device = Rc::new(RefCell::new(device));
-    let queue = Rc::new(RefCell::new(queue));
+    let device = Rc::new(device);
+    let queue = Rc::new(queue);
     let painter = Rc::new(RefCell::new(painter));
 
     // Display the demo application that ships with egui.
@@ -116,18 +118,17 @@ fn main() {
                     if let Ok(mut painter) = painter.try_borrow_mut() {
                         let start_time = start_time.elapsed().as_secs_f64();
                         state.input.time = Some(start_time);
-                        let egui_ctx = egui_ctx.borrow();
-                        let mut demo_app = demo_app.borrow_mut();
-                        let app_output = egui_ctx.run(state.input.take(), |ctx| {
-                            demo_app.ui(ctx);
+
+                        let app_output = egui_ctx.borrow().run(state.input.take(), |ctx| {
+                            demo_app.borrow_mut().ui(ctx);
                         });
 
                         state.fuse_output(win, app_output.platform_output);
-                        let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
+                        let clipped_mesh = egui_ctx.borrow().tessellate(app_output.shapes);
                         let texture = app_output.textures_delta;
                         painter.paint_jobs(
-                            &device.borrow(),
-                            &queue.borrow(),
+                            device.as_ref(),
+                            queue.as_ref(),
                             &mut state,
                             clipped_mesh,
                             texture,
@@ -143,18 +144,14 @@ fn main() {
     let mut timer = Timer::new(1);
 
     while fltk_app.wait() {
-        let mut state = state.borrow_mut();
-        let mut painter = painter.borrow_mut();
-        let egui_ctx = egui_ctx.borrow();
-        let device = device.borrow();
-        let queue = queue.borrow();
         // Draw the demo application.
-        let mut demo_app = demo_app.borrow_mut();
 
         let start_time = start_time.elapsed().as_secs_f64();
+        let mut state = state.borrow_mut();
         state.input.time = Some(start_time);
 
-        let app_output = egui_ctx.run(state.take_input(), |ctx| {
+        let app_output = egui_ctx.borrow().run(state.take_input(), |ctx| {
+            let mut demo_app = demo_app.borrow_mut();
             demo_app.ui(ctx);
         });
 
@@ -170,10 +167,16 @@ fn main() {
             || timer.elapsed()
         {
             state.fuse_output(&mut window, app_output.platform_output);
-            let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
+            let clipped_mesh = egui_ctx.borrow().tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &mut state, clipped_mesh, texture);
+            painter.borrow_mut().paint_jobs(
+                device.as_ref(),
+                queue.as_ref(),
+                &mut state,
+                clipped_mesh,
+                texture,
+            );
+            app::awake();
         }
-        app::awake();
     }
 }

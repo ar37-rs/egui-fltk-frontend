@@ -27,6 +27,7 @@ fn main() {
     window.show();
     window.make_current();
 
+    // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
 
@@ -48,10 +49,10 @@ fn main() {
     ))
     .unwrap();
 
-    let surface_format = surface.get_preferred_format(&adapter).unwrap();
+    let texture_format = wgpu::TextureFormat::Bgra8UnormSrgb;
     let surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_format,
+        format: texture_format,
         width: window.width() as u32,
         height: window.height() as u32,
         present_mode: wgpu::PresentMode::Mailbox,
@@ -60,7 +61,7 @@ fn main() {
     surface.configure(&device, &surface_config);
 
     // Prepare back and front.
-    let render_pass = backend::RenderPass::new(&device, surface_format, 1);
+    let render_pass = backend::RenderPass::new(&device, texture_format, 1);
     let (mut painter, state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
@@ -92,11 +93,7 @@ fn main() {
         }
     });
 
-    // We use the egui_wgpu_backend crate as the render backend.
-    let device = Rc::new(RefCell::new(device));
-    let queue = Rc::new(RefCell::new(queue));
-
-    let egui_ctx = Rc::new(RefCell::new(egui::Context::default()));
+    let egui_ctx = egui::Context::default();
     let start_time = Instant::now();
 
     // egui image from fltk svg
@@ -116,14 +113,12 @@ fn main() {
     let mut quit = false;
 
     while fltk_app.wait() {
-        let mut state = state.borrow_mut();
-        let egui_ctx = egui_ctx.borrow();
-        let device = device.borrow();
-        let queue = queue.borrow();
-        let start_time = start_time.elapsed().as_secs_f64();
-        state.input.time = Some(start_time);
+        // Draw the image demo application.
 
-        let app_output = egui_ctx.run(state.take_input(), |ctx| {
+        let start_time = start_time.elapsed().as_secs_f64();
+        state.borrow_mut().input.time = Some(start_time);
+
+        let app_output = egui_ctx.run(state.borrow_mut().take_input(), |ctx| {
             egui::CentralPanel::default().show(&ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
@@ -143,7 +138,7 @@ fn main() {
             });
         });
 
-        let window_resized = state.window_resized();
+        let window_resized = state.borrow_mut().window_resized();
         if window_resized {
             window.clear_damage();
         }
@@ -151,13 +146,21 @@ fn main() {
         // Make sure to put timer.elapsed() on the last order.
         if app_output.needs_repaint
             || window_resized
-            || state.mouse_btn_pressed()
+            || state.borrow().mouse_btn_pressed()
             || timer.elapsed()
         {
-            state.fuse_output(&mut window, app_output.platform_output);
+            state
+                .borrow_mut()
+                .fuse_output(&mut window, app_output.platform_output);
             let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &mut state, clipped_mesh, texture);
+            painter.paint_jobs(
+                &device,
+                &queue,
+                &mut *state.borrow_mut(),
+                clipped_mesh,
+                texture,
+            );
         } else if quit {
             break;
         }

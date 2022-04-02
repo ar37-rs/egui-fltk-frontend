@@ -69,51 +69,62 @@ impl Painter {
         texture: egui::TexturesDelta,
     ) {
         // Upload all resources for the GPU.
-        let screen_descriptor;
-        {
+        let screen_descriptor = {
             let width = state.physical_width;
             let height = state.physical_height;
-            let surface_config = &mut self.surface_config;
-            surface_config.width = width;
-            surface_config.height = height;
-            self.surface.configure(device, surface_config);
-            screen_descriptor = ScreenDescriptor {
+            self.surface_config.width = width;
+            self.surface_config.height = height;
+            self.surface.configure(device, &self.surface_config);
+            ScreenDescriptor {
                 physical_width: width,
                 physical_height: height,
                 scale_factor: state.pixels_per_point(),
             }
         };
+
         // Record all render passes.
         let output_frame = match self.surface.get_current_texture() {
-            Ok(frame) => frame,
-            Err(e) => {
-                eprintln!("Dropped frame with error: {}", e);
-                return;
+            Ok(frame) => {
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("encoder"),
+                });
+
+                {
+                    self.render_pass
+                        .add_textures(device, queue, &texture)
+                        .unwrap();
+                    self.render_pass.update_buffers(
+                        device,
+                        queue,
+                        &clipped_mesh,
+                        &screen_descriptor,
+                    );
+                    self.render_pass
+                        .execute(
+                            &mut encoder,
+                            &frame
+                                .texture
+                                .create_view(&wgpu::TextureViewDescriptor::default()),
+                            &clipped_mesh,
+                            &screen_descriptor,
+                            Some(wgpu::Color::BLACK),
+                        )
+                        .unwrap();
+
+                    // Remove unused textures
+                    self.render_pass.remove_textures(texture).unwrap();
+                }
+
+                // Submit command buffer
+                let cm_buffer = encoder.finish();
+                queue.submit(iter::once(cm_buffer));
+
+                frame
             }
+            Err(e) => return eprintln!("Dropped frame with error: {}", e),
         };
 
-        {
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("encoder"),
-            });
-            let render_pass = &mut self.render_pass;
-            render_pass.update_buffers(device, queue, &clipped_mesh, &screen_descriptor);
-            render_pass.add_textures(device, queue, &texture).unwrap();
-            render_pass
-                .execute(
-                    &mut encoder,
-                    &output_frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default()),
-                    &clipped_mesh,
-                    &screen_descriptor,
-                    Some(wgpu::Color::BLACK),
-                )
-                .unwrap();
-            render_pass.remove_textures(texture).unwrap();
-            // Submit the commands.
-            queue.submit(iter::once(encoder.finish()));
-        }
+        // Draw finalize frame
         output_frame.present();
     }
 }
