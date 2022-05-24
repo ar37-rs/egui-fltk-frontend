@@ -5,7 +5,7 @@
 [![Documentation](https://docs.rs/egui-fltk-frontend/badge.svg)](https://docs.rs/egui-fltk-frontend)
 [![CI](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml)
 
-[FLTK](https://github.com/fltk-rs/fltk-rs) frontend for egui WGPU.
+[FLTK](https://github.com/fltk-rs/fltk-rs) frontend for [egui](https://github.com/emilk/egui) [WGPU](https://github.com/gfx-rs/wgpu).
 
 ## On linux Debian/Ubuntu based distros, install latest build tools (if not installed)
 
