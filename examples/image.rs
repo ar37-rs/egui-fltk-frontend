@@ -1,8 +1,9 @@
-use backend::wgpu;
 use egui_fltk_frontend as frontend;
-use egui_wgpu_backend as backend;
-use fltk::image::{JpegImage, SvgImage};
-use frontend::{
+use egui_fltk_frontend::{
+    backend::{
+        egui_wgpu::{renderer::RenderPass, wgpu},
+        pollster,
+    },
     egui::{self, Label},
     fltk::{
         app,
@@ -12,6 +13,7 @@ use frontend::{
     },
     EguiImageConvertible, RetainedEguiImage, Timer,
 };
+use fltk::image::{JpegImage, SvgImage};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 fn main() {
@@ -61,9 +63,12 @@ fn main() {
     surface.configure(&device, &surface_config);
 
     // Prepare back and front.
-    let render_pass = backend::RenderPass::new(&device, texture_format, 1);
-    let (mut painter, state) =
+    let render_pass = RenderPass::new(&device, texture_format, 1);
+    let (mut painter, mut state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
+
+    // Set visual scale if needed, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
+    state.visual_scale(1.5);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -115,8 +120,9 @@ fn main() {
     while fltk_app.wait() {
         // Draw the image demo application.
 
-        let start_time = start_time.elapsed().as_secs_f64();
-        state.borrow_mut().input.time = Some(start_time);
+        state
+            .borrow_mut()
+            .start_time(start_time.elapsed().as_secs_f64());
 
         let app_output = egui_ctx.run(state.borrow_mut().take_input(), |ctx| {
             egui::CentralPanel::default().show(&ctx, |ui| {
@@ -152,13 +158,13 @@ fn main() {
             state
                 .borrow_mut()
                 .fuse_output(&mut window, app_output.platform_output);
-            let clipped_mesh = egui_ctx.tessellate(app_output.shapes);
+            let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
             painter.paint_jobs(
                 &device,
                 &queue,
                 &mut *state.borrow_mut(),
-                clipped_mesh,
+                clipped_primitive,
                 texture,
             );
         } else if quit {

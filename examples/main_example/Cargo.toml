@@ -1,6 +1,6 @@
 [package]
 name = "main_example"
-version = "0.17.10"
+version = "0.18"
 edition = "2021"
 rust-version = "1.56.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
@@ -13,7 +13,5 @@ resolver = "2"
 [dependencies]
 # With fltk-bundled (faster build time) features work on windows, linux and mac x64 only (requires curl and tar)
 # egui-fltk-frontend = { version = "0.17", features = ["fltk-bundled"] }
-egui-fltk-frontend = "0.17"
-egui_demo_lib = "0.17"
-egui_wgpu_backend = "0.17"
-pollster = "0.2"
+egui-fltk-frontend = "0.18"
+egui_demo_lib = "0.18"

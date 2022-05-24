@@ -1,7 +1,8 @@
 pub use egui;
 use egui::{pos2, vec2, CursorIcon, Event, Rect, Vec2};
 pub use egui_image::RetainedEguiImage;
-use egui_wgpu_backend::{wgpu, RenderPass, ScreenDescriptor};
+pub mod backend;
+use backend::egui_wgpu::{renderer::RenderPass, renderer::ScreenDescriptor, wgpu};
 pub use fltk;
 use fltk::{
     app,
@@ -65,7 +66,7 @@ impl Painter {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         state: &mut EguiState,
-        clipped_mesh: Vec<egui::ClippedMesh>,
+        clipped_primitive: Vec<egui::ClippedPrimitive>,
         texture: egui::TexturesDelta,
     ) {
         // Upload all resources for the GPU.
@@ -76,9 +77,8 @@ impl Painter {
             self.surface_config.height = height;
             self.surface.configure(device, &self.surface_config);
             ScreenDescriptor {
-                physical_width: width,
-                physical_height: height,
-                scale_factor: state.pixels_per_point(),
+                size_in_pixels: [width, height],
+                pixels_per_point: state.pixels_per_point(),
             }
         };
 
@@ -90,35 +90,29 @@ impl Painter {
                 });
 
                 {
-                    self.render_pass
-                        .add_textures(device, queue, &texture)
-                        .unwrap();
+                    for (id, img_del) in &texture.set {
+                        self.render_pass.update_texture(device, queue, *id, img_del);
+                    }
                     self.render_pass.update_buffers(
                         device,
                         queue,
-                        &clipped_mesh,
+                        &clipped_primitive,
                         &screen_descriptor,
                     );
-                    self.render_pass
-                        .execute(
-                            &mut encoder,
-                            &frame
-                                .texture
-                                .create_view(&wgpu::TextureViewDescriptor::default()),
-                            &clipped_mesh,
-                            &screen_descriptor,
-                            Some(wgpu::Color::BLACK),
-                        )
-                        .unwrap();
-
-                    // Remove unused textures
-                    self.render_pass.remove_textures(texture).unwrap();
+                    self.render_pass.execute(
+                        &mut encoder,
+                        &frame
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                        &clipped_primitive,
+                        &screen_descriptor,
+                        Some(wgpu::Color::BLACK),
+                    );
                 }
 
                 // Submit command buffer
                 let cm_buffer = encoder.finish();
                 queue.submit(iter::once(cm_buffer));
-
                 frame
             }
             Err(e) => return eprintln!("Dropped frame with error: {}", e),
@@ -159,7 +153,7 @@ pub struct EguiState {
     _window_resized: bool,
     pub fuse_cursor: FusedCursor,
     pub pointer_pos: egui::Pos2,
-    pub input: egui::RawInput,
+    input: egui::RawInput,
     pub physical_width: u32,
     pub physical_height: u32,
     pub _pixels_per_point: f32,
@@ -201,7 +195,7 @@ impl EguiState {
     }
 
     /// Set visual scale, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
-    pub fn set_visual_scale(&mut self, size: f32) {
+    pub fn visual_scale(&mut self, size: f32) {
         // have to be setted the pixels_per_point of both the inner (input) and the state.
         self.input.pixels_per_point = Some(size);
         self._pixels_per_point = size;
@@ -225,6 +219,11 @@ impl EguiState {
         }
         take
     }
+
+    /// Set start time for egui timer related activity.
+    pub fn start_time(&mut self, elapsed: f64) {
+        self.input.time = Some(elapsed);
+    }
 }
 
 /// Handles input/events from FLTK
@@ -233,7 +232,7 @@ pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state:
         enums::Event::Resize => {
             state.physical_width = win.width() as u32;
             state.physical_height = win.height() as u32;
-            state.set_visual_scale(state.pixels_per_point());
+            state.visual_scale(state.pixels_per_point());
             state._window_resized = true;
         }
         //MouseButonLeft pressed is the only one needed by egui

@@ -5,7 +5,7 @@
 [![Documentation](https://docs.rs/egui-fltk-frontend/badge.svg)](https://docs.rs/egui-fltk-frontend)
 [![CI](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml)
 
-[FLTK](https://github.com/fltk-rs/fltk-rs) Frontend for [Egui WGPU Backend](https://github.com/hasenbanck/egui_wgpu_backend)
+[FLTK](https://github.com/fltk-rs/fltk-rs) frontend for egui WGPU.
 
 ## On linux Debian/Ubuntu based distros, install latest build tools (if not installed)
 
@@ -31,7 +31,7 @@ On wayland desktop enable-features:
 
 ```toml
 [dependencies]
-egui-fltk-frontend = { version = "0.17",  features = ["wayland"] }
+egui-fltk-frontend = { version = "0.18",  features = ["wayland"] }
 ```
 
 ## Example

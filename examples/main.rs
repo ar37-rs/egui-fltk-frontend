@@ -1,7 +1,9 @@
-use backend::wgpu;
 use egui_fltk_frontend as frontend;
-use egui_wgpu_backend as backend;
 use frontend::{
+    backend::{
+        egui_wgpu::{renderer::RenderPass, wgpu},
+        pollster,
+    },
     egui,
     fltk::{
         app,
@@ -60,7 +62,7 @@ fn main() {
     surface.configure(&device, &surface_config);
 
     // Prepare back and front.
-    let render_pass = backend::RenderPass::new(&device, texture_format, 1);
+    let render_pass = RenderPass::new(&device, texture_format, 1);
     let (painter, state) = frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
     // Create egui state
@@ -115,21 +117,20 @@ fn main() {
                 if state.window_resized() {
                     win.clear_damage();
                     if let Ok(mut painter) = painter.try_borrow_mut() {
-                        let start_time = start_time.elapsed().as_secs_f64();
-                        state.input.time = Some(start_time);
+                        state.start_time(start_time.elapsed().as_secs_f64());
 
-                        let app_output = egui_ctx.borrow().run(state.input.take(), |ctx| {
+                        let app_output = egui_ctx.borrow().run(state.take_input(), |ctx| {
                             demo_app.borrow_mut().ui(ctx);
                         });
 
                         state.fuse_output(win, app_output.platform_output);
-                        let clipped_mesh = egui_ctx.borrow().tessellate(app_output.shapes);
+                        let clipped_primitive = egui_ctx.borrow().tessellate(app_output.shapes);
                         let texture = app_output.textures_delta;
                         painter.paint_jobs(
                             device.as_ref(),
                             queue.as_ref(),
                             &mut state,
-                            clipped_mesh,
+                            clipped_primitive,
                             texture,
                         );
                         app::awake();
@@ -145,9 +146,8 @@ fn main() {
     while fltk_app.wait() {
         // Draw the demo application.
 
-        let start_time = start_time.elapsed().as_secs_f64();
         let mut state = state.borrow_mut();
-        state.input.time = Some(start_time);
+        state.start_time(start_time.elapsed().as_secs_f64());
 
         let app_output = egui_ctx.borrow().run(state.take_input(), |ctx| {
             let mut demo_app = demo_app.borrow_mut();
@@ -166,13 +166,13 @@ fn main() {
             || timer.elapsed()
         {
             state.fuse_output(&mut window, app_output.platform_output);
-            let clipped_mesh = egui_ctx.borrow().tessellate(app_output.shapes);
+            let clipped_primitive = egui_ctx.borrow().tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
             painter.borrow_mut().paint_jobs(
                 device.as_ref(),
                 queue.as_ref(),
                 &mut state,
-                clipped_mesh,
+                clipped_primitive,
                 texture,
             );
             app::awake();
