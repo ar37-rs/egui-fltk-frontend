@@ -145,9 +145,6 @@ fn main() {
         });
 
         let window_resized = state.borrow_mut().window_resized();
-        if window_resized {
-            window.clear_damage();
-        }
 
         // Make sure to put timer.elapsed() on the last order.
         if app_output.needs_repaint
@@ -155,6 +152,10 @@ fn main() {
             || state.borrow().mouse_btn_pressed()
             || timer.elapsed()
         {
+            if window_resized {
+                window.clear_damage();
+            }
+
             state
                 .borrow_mut()
                 .fuse_output(&mut window, app_output.platform_output);
@@ -167,9 +168,9 @@ fn main() {
                 clipped_primitive,
                 texture,
             );
+            app::awake();
         } else if quit {
             break;
         }
-        app::awake();
     }
 }

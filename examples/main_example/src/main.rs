@@ -155,9 +155,6 @@ fn main() {
         });
 
         let window_resized = state.window_resized();
-        if window_resized {
-            window.clear_damage();
-        }
 
         // Make sure to put timer.elapsed() on the last order.
         if app_output.needs_repaint
@@ -165,6 +162,10 @@ fn main() {
             || state.mouse_btn_pressed()
             || timer.elapsed()
         {
+            if window_resized {
+                window.clear_damage();
+            }
+            
             state.fuse_output(&mut window, app_output.platform_output);
             let clipped_primitive = egui_ctx.borrow().tessellate(app_output.shapes);
             let texture = app_output.textures_delta;

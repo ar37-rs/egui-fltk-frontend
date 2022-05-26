@@ -71,13 +71,11 @@ impl Painter {
     ) {
         // Upload all resources for the GPU.
         let screen_descriptor = {
-            let width = state.physical_width;
-            let height = state.physical_height;
-            self.surface_config.width = width;
-            self.surface_config.height = height;
+            self.surface_config.width = state.physical_width;
+            self.surface_config.height = state.physical_height;
             self.surface.configure(device, &self.surface_config);
             ScreenDescriptor {
-                size_in_pixels: [width, height],
+                size_in_pixels: [self.surface_config.width, self.surface_config.height],
                 pixels_per_point: state.pixels_per_point(),
             }
         };
@@ -90,25 +88,31 @@ impl Painter {
                 });
 
                 {
-                    for (id, img_del) in &texture.set {
-                        self.render_pass.update_texture(device, queue, *id, img_del);
+                    for id in texture.free {
+                        self.render_pass.free_texture(&id);
                     }
+
+                    for (id, img_del) in texture.set {
+                        self.render_pass.update_texture(device, queue, id, &img_del);
+                    }
+
                     self.render_pass.update_buffers(
                         device,
                         queue,
                         &clipped_primitive,
                         &screen_descriptor,
                     );
-                    self.render_pass.execute(
-                        &mut encoder,
-                        &frame
-                            .texture
-                            .create_view(&wgpu::TextureViewDescriptor::default()),
-                        &clipped_primitive,
-                        &screen_descriptor,
-                        Some(wgpu::Color::BLACK),
-                    );
                 }
+
+                self.render_pass.execute(
+                    &mut encoder,
+                    &frame
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                    &clipped_primitive,
+                    &screen_descriptor,
+                    Some(wgpu::Color::BLACK),
+                );
 
                 // Submit command buffer
                 let cm_buffer = encoder.finish();
@@ -158,9 +162,9 @@ pub struct EguiState {
     pub physical_height: u32,
     pub _pixels_per_point: f32,
     pub clipboard: Clipboard,
-    // default value is 12.0
+    /// default value is 12.0
     pub scroll_factor: f32,
-    // default value is 8.0
+    /// default value is 8.0
     pub zoom_factor: f32,
     _mouse_btn_pressed: bool,
 }

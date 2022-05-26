@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.18.0"
+version = "0.18.1"
 edition = "2021"
 rust-version = "1.60.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
