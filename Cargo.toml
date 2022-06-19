@@ -17,7 +17,7 @@ exclude = ["screenshot/"]
 [dependencies]
 # internal use case
 # fltk = { version = "1.3", features = ["raw-window-handle", "fltk-bundled"] }
-fltk = { version = "1.3", features = ["raw-window-handle", "enable-glwindow"] }
+fltk = { version = "1.3", features = ["raw-window-handle"] }
 egui = "0.18"
 egui-wgpu = "0.18"
 pollster = "0.2"
