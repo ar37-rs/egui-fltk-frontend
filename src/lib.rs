@@ -233,6 +233,9 @@ impl EguiState {
 pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state: &mut EguiState) {
     match event {
         enums::Event::Resize => {
+            if win.damage() {
+                win.clear_damage();
+            }
             state.physical_width = win.width() as _;
             state.physical_height = win.height() as _;
             state.set_visual_scale(state.pixels_per_point());

@@ -152,10 +152,6 @@ fn main() {
             || state.borrow().mouse_btn_pressed()
             || timer.elapsed()
         {
-            if window_resized {
-                window.clear_damage();
-            }
-
             state
                 .borrow_mut()
                 .fuse_output(&mut window, app_output.platform_output);

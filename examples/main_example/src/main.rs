@@ -162,10 +162,6 @@ fn main() {
             || state.mouse_btn_pressed()
             || timer.elapsed()
         {
-            if window_resized {
-                window.clear_damage();
-            }
-            
             state.fuse_output(&mut window, app_output.platform_output);
             let clipped_primitive = egui_ctx.borrow().tessellate(app_output.shapes);
             let texture = app_output.textures_delta;

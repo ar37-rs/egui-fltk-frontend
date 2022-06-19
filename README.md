@@ -16,7 +16,7 @@ sudo apt-get update && sudo apt-get install build-essential cmake ninja-build
 make sure to install the latest FLTK requirements:
 
 ```
-sudo apt-get update && sudo apt-get install -y libpango1.0-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libgl1-mesa-dev libglu1-mesa-dev libmpv-dev
+sudo apt-get update && sudo apt-get install -y libpango1.0-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libgl1-mesa-dev libglu1-mesa-dev
 ```
 
 and egui requirements as well:
