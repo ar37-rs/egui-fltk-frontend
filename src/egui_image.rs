@@ -37,7 +37,7 @@ impl RetainedEguiImage {
         debug_name: impl Into<String>,
         image: I,
     ) -> Result<RetainedEguiImage, FltkError> {
-        let size = [image.data_w() as usize, image.data_h() as usize];
+        let size = [image.data_w() as _, image.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
             &image
@@ -53,7 +53,7 @@ impl RetainedEguiImage {
         debug_name: impl Into<String>,
         image: &I,
     ) -> Result<RetainedEguiImage, FltkError> {
-        let size = [image.data_w() as usize, image.data_h() as usize];
+        let size = [image.data_w() as _, image.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
             &image
@@ -70,7 +70,7 @@ impl RetainedEguiImage {
         svg_image: &mut SvgImage,
     ) -> Result<RetainedEguiImage, FltkError> {
         svg_image.normalize();
-        let size = [svg_image.data_w() as usize, svg_image.data_h() as usize];
+        let size = [svg_image.data_w() as _, svg_image.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
             &svg_image
@@ -87,7 +87,7 @@ impl RetainedEguiImage {
         mut svg_image: SvgImage,
     ) -> Result<RetainedEguiImage, FltkError> {
         svg_image.normalize();
-        let size = [svg_image.data_w() as usize, svg_image.data_h() as usize];
+        let size = [svg_image.data_w() as _, svg_image.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
             &svg_image
@@ -107,7 +107,7 @@ impl RetainedEguiImage {
     /// The size of the image data (number of pixels wide/high).
     pub fn size_vec2(&self) -> egui::Vec2 {
         let [w, h] = self.size();
-        egui::vec2(w as f32, h as f32)
+        egui::vec2(w as _, h as _)
     }
 
     /// The debug name of the image, e.g. the file name.

@@ -25,7 +25,7 @@ pub fn begin_with(
     let ppu = window.pixels_per_unit();
     let x = window.width();
     let y = window.height();
-    let rect = egui::vec2(x as f32, y as f32) / ppu;
+    let rect = egui::vec2(x as _, y as _) / ppu;
     let screen_rect = egui::Rect::from_min_size(egui::Pos2::new(0f32, 0f32), rect);
 
     let painter = Painter {
@@ -43,8 +43,8 @@ pub fn begin_with(
             pixels_per_point: Some(ppu),
             ..Default::default()
         },
-        physical_width: x as u32,
-        physical_height: y as u32,
+        physical_width: x as _,
+        physical_height: y as _,
         _pixels_per_point: ppu,
         clipboard: clipboard::Clipboard::default(),
         _mouse_btn_pressed: false,
@@ -87,22 +87,16 @@ impl Painter {
                     label: Some("encoder"),
                 });
 
-                {
-                    for id in texture.free {
-                        self.render_pass.free_texture(&id);
-                    }
-
-                    for (id, img_del) in texture.set {
-                        self.render_pass.update_texture(device, queue, id, &img_del);
-                    }
-
-                    self.render_pass.update_buffers(
-                        device,
-                        queue,
-                        &clipped_primitive,
-                        &screen_descriptor,
-                    );
+                for (id, img_del) in texture.set {
+                    self.render_pass.update_texture(device, queue, id, &img_del);
                 }
+
+                self.render_pass.update_buffers(
+                    device,
+                    queue,
+                    &clipped_primitive,
+                    &screen_descriptor,
+                );
 
                 self.render_pass.execute(
                     &mut encoder,
@@ -113,6 +107,12 @@ impl Painter {
                     &screen_descriptor,
                     Some(wgpu::Color::BLACK),
                 );
+
+                if texture.free.len() > 0 {
+                    texture.free.into_iter().for_each(|id| {
+                        self.render_pass.free_texture(&id);
+                    });
+                }
 
                 // Submit command buffer
                 let cm_buffer = encoder.finish();
@@ -129,7 +129,7 @@ impl Painter {
 
 /// Frame time for CPU usage.
 pub fn get_frame_time(start_time: Instant) -> f32 {
-    (Instant::now() - start_time).as_secs_f64() as f32
+    (Instant::now() - start_time).as_secs_f64() as _
 }
 
 /// The default cursor
@@ -199,13 +199,13 @@ impl EguiState {
     }
 
     /// Set visual scale, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
-    pub fn visual_scale(&mut self, size: f32) {
+    pub fn set_visual_scale(&mut self, size: f32) {
         // have to be setted the pixels_per_point of both the inner (input) and the state.
         self.input.pixels_per_point = Some(size);
         self._pixels_per_point = size;
 
         // resize rect with physical dimention size.
-        let rect = vec2(self.physical_width as f32, self.physical_height as f32) / size;
+        let rect = vec2(self.physical_width as _, self.physical_height as _) / size;
         self.input.screen_rect = Some(Rect::from_min_size(Default::default(), rect));
     }
 
@@ -213,7 +213,6 @@ impl EguiState {
         self._pixels_per_point
     }
 
-    /// Don't use state.input.take() use this fn instead (to avoid pixels per point miscalculation).
     pub fn take_input(&mut self) -> egui::RawInput {
         let pixels_per_point = self.input.pixels_per_point;
         let take = self.input.take();
@@ -234,9 +233,9 @@ impl EguiState {
 pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state: &mut EguiState) {
     match event {
         enums::Event::Resize => {
-            state.physical_width = win.width() as u32;
-            state.physical_height = win.height() as u32;
-            state.visual_scale(state.pixels_per_point());
+            state.physical_width = win.width() as _;
+            state.physical_height = win.height() as _;
+            state.set_visual_scale(state.pixels_per_point());
             state._window_resized = true;
         }
         //MouseButonLeft pressed is the only one needed by egui
@@ -561,7 +560,7 @@ where
 {
     /// Return (egui_extras::RetainedEguiImage)
     fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
-        let size = [self.data_w() as usize, self.data_h() as usize];
+        let size = [self.data_w() as _, self.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
             &self
@@ -594,61 +593,117 @@ impl EguiSvgConvertible for fltk::image::SvgImage {
         Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
     }
 }
+/// egui::ColorImage Extender.
+pub trait ColorImageExt {
+    fn from_vec_color32(size: [usize; 2], vec: Vec<egui::Color32>) -> Self;
 
-/// egui::TextureHandle from Vec egui::Color32
-pub fn tex_handle_from_vec_color32(
-    ctx: &egui::Context,
-    debug_name: &str,
-    vec: Vec<egui::Color32>,
-    size: [usize; 2],
-) -> egui::TextureHandle {
-    let mut pixels: Vec<u8> = Vec::with_capacity(vec.len() * 4);
-    vec.into_iter().for_each(|x| {
-        pixels.push(x[0]);
-        pixels.push(x[1]);
-        pixels.push(x[2]);
-        pixels.push(x[3]);
-    });
-    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-    ctx.load_texture(debug_name, color_image)
+    fn from_color32_slice(size: [usize; 2], slice: &[egui::Color32]) -> Self;
 }
 
-/// egui::TextureHandle from slice of egui::Color32
-pub fn tex_handle_from_color32_slice(
-    ctx: &egui::Context,
-    debug_name: &str,
-    slice: &[egui::Color32],
-    size: [usize; 2],
-) -> egui::TextureHandle {
-    let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
-    slice.iter().for_each(|x| {
-        pixels.push(x[0]);
-        pixels.push(x[1]);
-        pixels.push(x[2]);
-        pixels.push(x[3]);
-    });
-    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-    ctx.load_texture(debug_name, color_image)
+impl ColorImageExt for egui::ColorImage {
+    fn from_vec_color32(size: [usize; 2], vec: Vec<egui::Color32>) -> Self {
+        let mut pixels: Vec<u8> = Vec::with_capacity(vec.len() * 4);
+        vec.into_iter().for_each(|x| {
+            pixels.push(x[0]);
+            pixels.push(x[1]);
+            pixels.push(x[2]);
+            pixels.push(x[3]);
+        });
+        egui::ColorImage::from_rgba_unmultiplied(size, &pixels)
+    }
+
+    fn from_color32_slice(size: [usize; 2], slice: &[egui::Color32]) -> Self {
+        let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
+        slice.into_iter().for_each(|x| {
+            pixels.push(x[0]);
+            pixels.push(x[1]);
+            pixels.push(x[2]);
+            pixels.push(x[3]);
+        });
+        egui::ColorImage::from_rgba_unmultiplied(size, &pixels)
+    }
 }
 
-/// egui::TextureHandle from slice of u8
-pub fn tex_handle_from_u8_slice(
-    ctx: &egui::Context,
-    debug_name: &str,
-    slice: &[u8],
-    size: [usize; 2],
-) -> egui::TextureHandle {
-    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, slice);
-    ctx.load_texture(debug_name, color_image)
+/// egui::TextureHandle Extender.
+pub trait TextureHandleExt {
+    /// egui::TextureHandle from Vec u8
+    fn from_vec_u8(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        vec: Vec<u8>,
+    ) -> egui::TextureHandle;
+
+    fn from_u8_slice(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        slice: &[u8],
+    ) -> egui::TextureHandle;
+
+    fn from_vec_color32(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        vec: Vec<egui::Color32>,
+    ) -> egui::TextureHandle;
+
+    fn from_color32_slice(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        slice: &[egui::Color32],
+    ) -> egui::TextureHandle;
 }
 
-/// egui::TextureHandle from Vec u8
-pub fn tex_handle_from_vec_u8(
-    ctx: &egui::Context,
-    debug_name: &str,
-    vec: Vec<u8>,
-    size: [usize; 2],
-) -> egui::TextureHandle {
-    let color_image = egui::ColorImage::from_rgba_unmultiplied(size, vec.as_slice());
-    ctx.load_texture(debug_name, color_image)
+impl TextureHandleExt for egui::TextureHandle {
+    fn from_vec_u8(ctx: &egui::Context, debug_name: &str, size: [usize; 2], vec: Vec<u8>) -> Self {
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &vec);
+        drop(vec);
+        ctx.load_texture(debug_name, color_image)
+    }
+
+    fn from_u8_slice(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        slice: &[u8],
+    ) -> Self {
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(size, slice);
+        ctx.load_texture(debug_name, color_image)
+    }
+
+    fn from_vec_color32(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        vec: Vec<egui::Color32>,
+    ) -> Self {
+        let mut pixels: Vec<u8> = Vec::with_capacity(vec.len() * 4);
+        vec.into_iter().for_each(|x| {
+            pixels.push(x[0]);
+            pixels.push(x[1]);
+            pixels.push(x[2]);
+            pixels.push(x[3]);
+        });
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+        ctx.load_texture(debug_name, color_image)
+    }
+
+    fn from_color32_slice(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        slice: &[egui::Color32],
+    ) -> Self {
+        let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
+        slice.into_iter().for_each(|x| {
+            pixels.push(x[0]);
+            pixels.push(x[1]);
+            pixels.push(x[2]);
+            pixels.push(x[3]);
+        });
+        let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
+        ctx.load_texture(debug_name, color_image)
+    }
 }

@@ -68,7 +68,7 @@ fn main() {
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
     // Set visual scale if needed, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
-    state.visual_scale(1.5);
+    state.set_visual_scale(1.5);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -169,7 +169,9 @@ fn main() {
                 texture,
             );
             app::awake();
-        } else if quit {
+        }
+
+        if quit {
             break;
         }
     }

@@ -25,15 +25,6 @@ and egui requirements as well:
 sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libspeechd-dev libxkbcommon-dev libssl-dev
 ```
 
-## Usage
-
-On wayland desktop enable-features:
-
-```toml
-[dependencies]
-egui-fltk-frontend = { version = "0.18",  features = ["wayland"] }
-```
-
 ## Example
 
 Running example *.rs files:
