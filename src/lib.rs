@@ -191,6 +191,10 @@ impl EguiState {
         win: &mut fltk::window::Window,
         egui_output: egui::PlatformOutput,
     ) {
+        if win.damage() {
+            win.clear_damage();
+        }
+        
         let copied_text = &egui_output.copied_text;
         if !copied_text.is_empty() {
             self.clipboard.set(copied_text.into());
