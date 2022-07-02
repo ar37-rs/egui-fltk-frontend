@@ -1,9 +1,5 @@
 use egui_fltk_frontend as frontend;
 use egui_fltk_frontend::{
-    backend::{
-        egui_wgpu::{renderer::RenderPass, wgpu},
-        pollster,
-    },
     egui::{self, Label},
     fltk::{
         app,
@@ -11,7 +7,7 @@ use egui_fltk_frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    EguiImageConvertible, RetainedEguiImage, Timer,
+    pollster, wgpu, EguiImageConvertible, RenderPass, RetainedEguiImage, Timer,
 };
 use fltk::image::{JpegImage, SvgImage};
 use std::{cell::RefCell, rc::Rc, time::Instant};
@@ -57,7 +53,7 @@ fn main() {
         format: texture_format,
         width: window.width() as u32,
         height: window.height() as u32,
-        present_mode: wgpu::PresentMode::Mailbox,
+        present_mode: wgpu::PresentMode::Fifo,
     };
 
     surface.configure(&device, &surface_config);

@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.18.4"
+version = "0.19.0"
 edition = "2021"
 rust-version = "1.60.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
@@ -15,12 +15,15 @@ exclude = ["screenshot/"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bytemuck = "1"
+egui = { version = "0.18", features = [
+    "bytemuck",
+] }
 # internal use case
-# fltk = { version = "1.3", features = ["raw-window-handle", "fltk-bundled"] }
+# fltk = { version = "1.3", features = ["raw-window-handle", "fltk-bundled", "enable-glwindow"] }
 fltk = { version = "1.3", features = ["raw-window-handle"] }
-egui = "0.18"
-egui-wgpu = "0.18"
 pollster = "0.2"
+wgpu = { version = "0.13" }
 
 [target."cfg(windows)".dependencies.copypasta]
 version = "0.8"
@@ -46,6 +49,12 @@ system-fltk = ["fltk/system-fltk"]
 system-libjpeg = ["fltk/system-libjpeg"]
 system-libpng = ["fltk/system-libpng"]
 system-zlib = ["fltk/system-zlib"]
+wgpu-angle = ["wgpu/angle"]
+wgpu-glsl = ["wgpu/glsl"]
+wgpu-replay = ["wgpu/replay"]
+wgpu-spirv = ["wgpu/spirv"]
+wgpu-trace = ["wgpu/trace"]
+wgpu-vulkan-portability = ["wgpu/vulkan-portability"]
 
 [dev-dependencies]
 egui_demo_lib = "0.18"

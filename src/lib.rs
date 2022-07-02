@@ -1,15 +1,17 @@
 pub use egui;
 use egui::{pos2, vec2, CursorIcon, Event, Rect, Vec2};
 pub use egui_image::RetainedEguiImage;
-pub mod backend;
-use backend::egui_wgpu::{renderer::RenderPass, renderer::ScreenDescriptor, wgpu};
+mod backend;
+pub use backend::{RenderPass, ScreenDescriptor};
 pub use fltk;
 use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WidgetExt, WindowExt},
 };
+pub use pollster;
 use std::{iter, time::Instant};
+pub use wgpu;
 mod clipboard;
 mod egui_image;
 use clipboard::Clipboard;
@@ -87,6 +89,12 @@ impl Painter {
                     label: Some("encoder"),
                 });
 
+                if texture.free.len() > 0 {
+                    texture.free.into_iter().for_each(|id| {
+                        self.render_pass.free_texture(&id);
+                    });
+                }
+
                 for (id, img_del) in texture.set {
                     self.render_pass.update_texture(device, queue, id, &img_del);
                 }
@@ -107,12 +115,6 @@ impl Painter {
                     &screen_descriptor,
                     Some(wgpu::Color::BLACK),
                 );
-
-                if texture.free.len() > 0 {
-                    texture.free.into_iter().for_each(|id| {
-                        self.render_pass.free_texture(&id);
-                    });
-                }
 
                 // Submit command buffer
                 let cm_buffer = encoder.finish();

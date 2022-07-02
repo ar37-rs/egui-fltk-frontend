@@ -31,7 +31,7 @@ On pure wayland only desktop enable-features:
 
 ```toml
 [dependencies]
-egui-fltk-frontend = { version = "0.18", features = ["wayland"] }
+egui-fltk-frontend = { version = "0.19", features = ["wayland"] }
 ```
 
 Note:
