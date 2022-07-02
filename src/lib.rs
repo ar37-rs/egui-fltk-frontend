@@ -7,7 +7,8 @@ pub use fltk;
 use fltk::{
     app,
     enums::{self, Cursor},
-    prelude::{FltkError, ImageExt, WidgetExt, WindowExt},
+    prelude::{FltkError, ImageExt, WindowExt},
+    window::{GlutWindow, SingleWindow},
 };
 pub use pollster;
 use std::{iter, time::Instant};
@@ -16,13 +17,39 @@ mod clipboard;
 mod egui_image;
 use clipboard::Clipboard;
 
+/// Pixel per unit trait helper.
+pub trait PPU {
+    fn pixels_per_unit(&self) -> f32;
+}
+
+impl PPU for SingleWindow {
+    fn pixels_per_unit(&self) -> f32 {
+        self.pixels_per_unit()
+    }
+}
+
+impl PPU for GlutWindow {
+    fn pixels_per_unit(&self) -> f32 {
+        self.pixels_per_unit()
+    }
+}
+
+impl PPU for fltk::window::Window {
+    fn pixels_per_unit(&self) -> f32 {
+        self.pixels_per_unit()
+    }
+}
+
 /// Construct the frontend.
-pub fn begin_with(
-    window: &mut fltk::window::Window,
+pub fn begin_with<W>(
+    window: &mut W,
     render_pass: RenderPass,
     surface: wgpu::Surface,
     surface_config: wgpu::SurfaceConfiguration,
-) -> (Painter, EguiState) {
+) -> (Painter, EguiState)
+where
+    W: WindowExt + PPU,
+{
     app::set_screen_scale(window.screen_num(), 1.0);
     let ppu = window.pixels_per_unit();
     let x = window.width();
@@ -173,7 +200,10 @@ pub struct EguiState {
 
 impl EguiState {
     /// Conveniece method bundling the necessary components for input/event handling
-    pub fn fuse_input(&mut self, win: &mut fltk::window::Window, event: enums::Event) {
+    pub fn fuse_input<W>(&mut self, win: &mut W, event: enums::Event)
+    where
+        W: WindowExt,
+    {
         input_to_egui(win, event, self);
     }
 
@@ -188,11 +218,10 @@ impl EguiState {
     }
 
     /// Convenience method for outputting what egui emits each frame
-    pub fn fuse_output(
-        &mut self,
-        win: &mut fltk::window::Window,
-        egui_output: egui::PlatformOutput,
-    ) {
+    pub fn fuse_output<W>(&mut self, win: &mut W, egui_output: egui::PlatformOutput)
+    where
+        W: WindowExt,
+    {
         if win.damage() {
             win.clear_damage();
         }
@@ -236,7 +265,10 @@ impl EguiState {
 }
 
 /// Handles input/events from FLTK
-pub fn input_to_egui(win: &mut fltk::window::Window, event: enums::Event, state: &mut EguiState) {
+pub fn input_to_egui<W>(win: &mut W, event: enums::Event, state: &mut EguiState)
+where
+    W: WindowExt,
+{
     match event {
         enums::Event::Resize => {
             state.physical_width = win.width() as _;
@@ -469,11 +501,10 @@ pub fn translate_virtual_key_code(key: enums::Key) -> Option<egui::Key> {
 }
 
 /// Translates FLTK cursor to Egui cursors
-pub fn translate_cursor(
-    win: &mut fltk::window::Window,
-    fused: &mut FusedCursor,
-    cursor_icon: CursorIcon,
-) {
+pub fn translate_cursor<W>(win: &mut W, fused: &mut FusedCursor, cursor_icon: CursorIcon)
+where
+    W: WindowExt,
+{
     let tmp_icon = match cursor_icon {
         CursorIcon::None => enums::Cursor::None,
         CursorIcon::Default => enums::Cursor::Arrow,
