@@ -8,7 +8,7 @@ use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WindowExt},
-    window::{GlutWindow, SingleWindow},
+    window::{GlWindow, SingleWindow},
 };
 pub use pollster;
 use std::{iter, time::Instant};
@@ -28,7 +28,7 @@ impl PPU for SingleWindow {
     }
 }
 
-impl PPU for GlutWindow {
+impl PPU for GlWindow {
     fn pixels_per_unit(&self) -> f32 {
         self.pixels_per_unit()
     }
