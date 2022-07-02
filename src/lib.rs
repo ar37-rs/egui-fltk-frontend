@@ -8,7 +8,7 @@ use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WindowExt},
-    window::{GlWindow, SingleWindow},
+    window::SingleWindow,
 };
 pub use pollster;
 use std::{iter, time::Instant};
@@ -17,18 +17,22 @@ mod clipboard;
 mod egui_image;
 use clipboard::Clipboard;
 
+#[cfg(feature = "fltk-enable-glwindow")]
+use fltk::window::GlWindow;
+
 /// Pixel per unit trait helper.
 pub trait PPU {
     fn pixels_per_unit(&self) -> f32;
 }
 
-impl PPU for SingleWindow {
+#[cfg(feature = "fltk-enable-glwindow")]
+impl PPU for GlWindow {
     fn pixels_per_unit(&self) -> f32 {
         self.pixels_per_unit()
     }
 }
 
-impl PPU for GlWindow {
+impl PPU for SingleWindow {
     fn pixels_per_unit(&self) -> f32 {
         self.pixels_per_unit()
     }
