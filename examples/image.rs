@@ -47,7 +47,7 @@ fn main() {
     ))
     .unwrap();
 
-    let texture_format = wgpu::TextureFormat::Bgra8UnormSrgb;
+    let texture_format = surface.get_supported_formats(&adapter)[0];
     let surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format: texture_format,
