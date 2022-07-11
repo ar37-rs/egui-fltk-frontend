@@ -1,9 +1,11 @@
+// Enable the "fltk-enable-glwindow" features for more windowing compatibility.
+
 use egui_fltk_frontend as frontend;
 use egui_fltk_frontend::{
     egui,
     fltk::{
         app,
-        enums::Event,
+        enums::{self, Event},
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
@@ -19,9 +21,10 @@ fn main() {
     let fltk_app = app::App::default();
 
     // Initialize fltk windows with minimal size:
-    let mut window = window::Window::default()
+    let mut window = window::GlWindow::default()
         .with_size(960, 540)
         .center_screen();
+    window.set_mode(enums::Mode::Opengl3);
     window.set_label("SMAA Demo Window");
     window.make_resizable(true);
     window.end();
@@ -252,9 +255,12 @@ fn main() {
                             })],
                             depth_stencil_attachment: None,
                         });
+
+                        // Draw Triangle Texture
                         rpass.set_pipeline(&render_pipeline);
                         rpass.draw(0..3, 0..1);
-
+                        
+                        // Draw Egui Texture
                         painter.paint_with_rpass(
                             &mut rpass,
                             &device,
