@@ -94,11 +94,52 @@ pub struct Painter {
 }
 
 impl Painter {
+    /// Get the calculated WGPU ScreenDescriptor.
+    pub fn get_screen_descriptor(
+        &mut self,
+        device: &wgpu::Device,
+        state: &EguiState,
+    ) -> ScreenDescriptor {
+        self.surface_config.width = state.physical_width;
+        self.surface_config.height = state.physical_height;
+        self.surface.configure(device, &self.surface_config);
+        ScreenDescriptor {
+            size_in_pixels: [self.surface_config.width, self.surface_config.height],
+            pixels_per_point: state.pixels_per_point(),
+        }
+    }
+
+    /// Paint with egui renderpass
+    pub fn paint_with_rpass<'rpass>(
+        &'rpass mut self,
+        rpass: &mut wgpu::RenderPass<'rpass>,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        screen_descriptor: &ScreenDescriptor,
+        clipped_primitive: Vec<egui::ClippedPrimitive>,
+        texture: egui::TexturesDelta,
+    ) {
+        if texture.free.len() > 0 {
+            texture.free.into_iter().for_each(|id| {
+                self.render_pass.free_texture(&id);
+            });
+        }
+
+        for (id, img_del) in texture.set {
+            self.render_pass.update_texture(device, queue, id, &img_del);
+        }
+
+        self.render_pass
+            .update_buffers(device, queue, &clipped_primitive, screen_descriptor);
+        self.render_pass
+            .execute_with_renderpass(rpass, &clipped_primitive, screen_descriptor);
+    }
+
     pub fn paint_jobs(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        state: &mut EguiState,
+        state: &EguiState,
         clipped_primitive: Vec<egui::ClippedPrimitive>,
         texture: egui::TexturesDelta,
     ) {

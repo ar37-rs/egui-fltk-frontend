@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.19.1"
+version = "0.19.6"
 edition = "2021"
 rust-version = "1.60.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
@@ -56,5 +56,17 @@ wgpu-spirv = ["wgpu/spirv"]
 wgpu-trace = ["wgpu/trace"]
 wgpu-vulkan-portability = ["wgpu/vulkan-portability"]
 
+[[example]]
+name = "image"
+
+[[example]]
+name = "main"
+required-features = ["fltk-enable-glwindow"]
+
+[[example]]
+name = "smaa"
+required-features = ["fltk-enable-glwindow"]
+
 [dev-dependencies]
 egui_demo_lib = "0.18"
+smaa = "0.7"

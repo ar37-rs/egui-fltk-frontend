@@ -42,8 +42,9 @@ on xwayland based desktop (like gnome 42+) doesn't require to enable the "waylan
 Running example *.rs files:
 
 ```
-cargo run --example main
-cargo run --example image
+cargo r --example image
+cargo r --example main --features="fltk-enable-glwindow"
+cargo r --example smaa --features="fltk-enable-glwindow"
 ```
 
 or [click here](https://github.com/Ar37-rs/egui-fltk-frontend/tree/main/examples) on how to use it inside Cargo.toml

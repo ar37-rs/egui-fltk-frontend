@@ -17,7 +17,7 @@ fn main() {
 
     // Initialize fltk windows with minimal size:
     let mut window = window::Window::default()
-        .with_size(800, 600)
+        .with_size(1000, 720)
         .center_screen();
     window.set_label("Image Demo Window");
     window.make_resizable(true);
@@ -153,13 +153,7 @@ fn main() {
                 .fuse_output(&mut window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(
-                &device,
-                &queue,
-                &mut *state.borrow_mut(),
-                clipped_primitive,
-                texture,
-            );
+            painter.paint_jobs(&device, &queue, &state.borrow(), clipped_primitive, texture);
             app::awake();
         }
 

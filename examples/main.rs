@@ -1,9 +1,11 @@
+// Enable the "fltk-enable-glwindow" features for more windowing compatibility.
+
 use egui_fltk_frontend as frontend;
 use frontend::{
     egui,
     fltk::{
         app,
-        enums::Event,
+        enums::{self, Event},
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
@@ -15,9 +17,10 @@ fn main() {
     let fltk_app = app::App::default();
 
     // Initialize fltk windows with minimal size:
-    let mut window = window::Window::default()
+    let mut window = window::GlWindow::default()
         .with_size(800, 600)
         .center_screen();
+    window.set_mode(enums::Mode::Opengl3);
     window.set_label("Demo Window");
     window.make_resizable(true);
     window.end();
@@ -59,7 +62,8 @@ fn main() {
 
     // Prepare back and front.
     let render_pass = RenderPass::new(&device, texture_format, 1);
-    let (painter, state) = frontend::begin_with(&mut window, render_pass, surface, surface_config);
+    let (mut painter, state) =
+        frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -89,64 +93,20 @@ fn main() {
         }
     });
 
-    // We use the egui_wgpu_backend crate as the render backend.
-    let device = Rc::new(device);
-    let queue = Rc::new(queue);
-    let painter = Rc::new(RefCell::new(painter));
-
     // Display the demo application that ships with egui.
-    let demo_app = Rc::new(RefCell::new(egui_demo_lib::DemoWindows::default()));
-    let egui_ctx = Rc::new(RefCell::new(egui::Context::default()));
+    let mut demo_app = egui_demo_lib::DemoWindows::default();
+    let egui_ctx = egui::Context::default();
     let start_time = Instant::now();
-
-    // // Redraw window while being resized (required on windows platform).
-    window.draw({
-        let state = state.clone();
-        let painter = painter.clone();
-        let egui_ctx = egui_ctx.clone();
-        let device = device.clone();
-        let queue = queue.clone();
-        let demo_app = demo_app.clone();
-        move |win| {
-            // And here also using "if let ..." for safety.
-            if let Ok(mut state) = state.try_borrow_mut() {
-                if state.window_resized() {
-                    win.clear_damage();
-                    if let Ok(mut painter) = painter.try_borrow_mut() {
-                        state.start_time(start_time.elapsed().as_secs_f64());
-
-                        let app_output = egui_ctx.borrow().run(state.take_input(), |ctx| {
-                            demo_app.borrow_mut().ui(ctx);
-                        });
-
-                        state.fuse_output(win, app_output.platform_output);
-                        let clipped_primitive = egui_ctx.borrow().tessellate(app_output.shapes);
-                        let texture = app_output.textures_delta;
-                        painter.paint_jobs(
-                            device.as_ref(),
-                            queue.as_ref(),
-                            &mut state,
-                            clipped_primitive,
-                            texture,
-                        );
-                        app::awake();
-                    }
-                }
-            }
-        }
-    });
 
     // Use Timer for auto repaint if the app is idle.
     let mut timer = Timer::new(1);
 
     while fltk_app.wait() {
         // Draw the demo application.
-
         let mut state = state.borrow_mut();
         state.start_time(start_time.elapsed().as_secs_f64());
 
-        let app_output = egui_ctx.borrow().run(state.take_input(), |ctx| {
-            let mut demo_app = demo_app.borrow_mut();
+        let app_output = egui_ctx.run(state.take_input(), |ctx| {
             demo_app.ui(ctx);
         });
 
@@ -159,15 +119,9 @@ fn main() {
             || timer.elapsed()
         {
             state.fuse_output(&mut window, app_output.platform_output);
-            let clipped_primitive = egui_ctx.borrow().tessellate(app_output.shapes);
+            let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.borrow_mut().paint_jobs(
-                device.as_ref(),
-                queue.as_ref(),
-                &mut state,
-                clipped_primitive,
-                texture,
-            );
+            painter.paint_jobs(&device, &queue, &state, clipped_primitive, texture);
             app::awake();
         }
     }

@@ -121,7 +121,7 @@ fn main() {
             state.fuse_output(&mut window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &mut state, clipped_primitive, texture);
+            painter.paint_jobs(&device, &queue, &state, clipped_primitive, texture);
             app::awake();
         }
     }
