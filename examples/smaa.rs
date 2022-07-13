@@ -31,7 +31,7 @@ fn main() {
     window.show();
     window.make_current();
 
-    // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
+    // SMAA support on vulkan and gl backends only.
     let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
     let surface = unsafe { instance.create_surface(&window) };
 
@@ -259,7 +259,7 @@ fn main() {
                         // Draw Triangle Texture
                         rpass.set_pipeline(&render_pipeline);
                         rpass.draw(0..3, 0..1);
-                        
+
                         // Draw Egui Texture
                         painter.paint_with_rpass(
                             &mut rpass,
@@ -279,7 +279,6 @@ fn main() {
                 }
                 Err(e) => return eprintln!("Dropped frame with error: {}", e),
             };
-
             app::awake();
         }
 

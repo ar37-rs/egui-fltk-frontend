@@ -1,6 +1,6 @@
 [package]
 name = "main_example"
-version = "0.19.1"
+version = "0.19.7"
 edition = "2021"
 rust-version = "1.60"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]

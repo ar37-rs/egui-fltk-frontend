@@ -1,5 +1,6 @@
 use egui::epaint::Primitive;
-use std::{borrow::Cow, collections::HashMap, num::NonZeroU32};
+use fxhash::FxHashMap;
+use std::{borrow::Cow, num::NonZeroU32};
 use wgpu;
 use wgpu::util::DeviceExt as _;
 
@@ -81,7 +82,6 @@ fn vs_conv_main(
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return in.color * textureSample(r_tex_color, r_tex_sampler, in.tex_coord);
 }
-
 "#;
 
 /// Enum for selecting the right buffer type.
@@ -134,7 +134,7 @@ pub struct RenderPass {
     uniform_buffer: SizedBuffer,
     uniform_bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    textures: HashMap<egui::TextureId, (wgpu::Texture, wgpu::BindGroup)>,
+    textures: FxHashMap<egui::TextureId, (wgpu::Texture, wgpu::BindGroup)>,
 }
 
 impl RenderPass {
@@ -245,15 +245,15 @@ impl RenderPass {
                 unclipped_depth: false,
                 conservative: false,
                 cull_mode: None,
-                front_face: wgpu::FrontFace::default(),
-                polygon_mode: wgpu::PolygonMode::default(),
+                front_face: wgpu::FrontFace::Cw,
+                polygon_mode: wgpu::PolygonMode::Fill,
                 strip_index_format: None,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
                 alpha_to_coverage_enabled: false,
                 count: msaa_samples,
-                mask: !0,
+                ..Default::default()
             },
 
             fragment: Some(wgpu::FragmentState {
@@ -286,7 +286,7 @@ impl RenderPass {
             uniform_buffer,
             uniform_bind_group,
             texture_bind_group_layout,
-            textures: HashMap::new(),
+            textures: FxHashMap::default(),
         }
     }
 
@@ -295,7 +295,7 @@ impl RenderPass {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
-        paint_jobs: &[egui::epaint::ClippedPrimitive],
+        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         screen_descriptor: &ScreenDescriptor,
         clear_color: Option<wgpu::Color>,
     ) {
@@ -317,10 +317,13 @@ impl RenderPass {
             depth_stencil_attachment: None,
             label: Some("egui main render pass"),
         });
+
+        #[cfg(feature = "debug")]
         rpass.push_debug_group("egui_pass");
 
         self.execute_with_renderpass(&mut rpass, paint_jobs, screen_descriptor);
 
+        #[cfg(feature = "debug")]
         rpass.pop_debug_group();
     }
 
@@ -328,7 +331,7 @@ impl RenderPass {
     pub fn execute_with_renderpass<'rpass>(
         &'rpass self,
         rpass: &mut wgpu::RenderPass<'rpass>,
-        paint_jobs: &[egui::epaint::ClippedPrimitive],
+        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         screen_descriptor: &ScreenDescriptor,
     ) {
         rpass.set_pipeline(&self.render_pipeline);
@@ -338,19 +341,16 @@ impl RenderPass {
         let pixels_per_point = screen_descriptor.pixels_per_point;
         let size_in_pixels = screen_descriptor.size_in_pixels;
 
+        let index_buffers = &self.index_buffers;
+        let vertex_buffers = &self.vertex_buffers;
+        let textures = &self.textures;
         for (
-            (
-                egui::ClippedPrimitive {
-                    clip_rect,
-                    primitive,
-                },
-                vertex_buffer,
-            ),
-            index_buffer,
-        ) in paint_jobs
-            .iter()
-            .zip(&self.vertex_buffers)
-            .zip(&self.index_buffers)
+            i,
+            egui::ClippedPrimitive {
+                clip_rect,
+                primitive,
+            },
+        ) in paint_jobs.into_iter().enumerate()
         {
             // Transform clip rect to physical pixels.
             let clip_min_x = pixels_per_point * clip_rect.min.x;
@@ -389,13 +389,13 @@ impl RenderPass {
 
             match primitive {
                 Primitive::Mesh(mesh) => {
-                    if let Some((_texture, bind_group)) = self.textures.get(&mesh.texture_id) {
+                    if let Some((_texture, bind_group)) = textures.get(&mesh.texture_id) {
                         rpass.set_bind_group(1, bind_group, &[]);
                         rpass.set_index_buffer(
-                            index_buffer.buffer.slice(..),
+                            index_buffers[i].buffer.slice(..),
                             wgpu::IndexFormat::Uint32,
                         );
-                        rpass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..));
+                        rpass.set_vertex_buffer(0, vertex_buffers[i].buffer.slice(..));
                         rpass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
                     } else {
                         eprintln!("Missing texture: {:?}", mesh.texture_id);
@@ -443,9 +443,9 @@ impl RenderPass {
                 Cow::Owned(image.srgba_pixels(1.0).collect::<Vec<_>>())
             }
         };
-        let data_bytes: &[u8] = bytemuck::cast_slice(data_color32.as_slice());
 
         let queue_write_data_to_texture = |texture, origin| {
+            let data_bytes: &[u8] = bytemuck::cast_slice(&data_color32);
             queue.write_texture(
                 wgpu::ImageCopyTexture {
                     texture,
@@ -488,8 +488,12 @@ impl RenderPass {
             });
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
                 label: None,
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
                 mag_filter: wgpu::FilterMode::Linear,
                 min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::FilterMode::Linear,
                 ..Default::default()
             });
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -528,49 +532,56 @@ impl RenderPass {
         paint_jobs: &[egui::epaint::ClippedPrimitive],
         screen_descriptor: &ScreenDescriptor,
     ) {
-        let screen_size_in_points = screen_descriptor.screen_size_in_points();
-
         self.update_buffer(
             device,
             queue,
             &BufferType::Uniform,
             0,
             bytemuck::cast_slice(&[UniformBuffer {
-                screen_size_in_points,
+                screen_size_in_points: screen_descriptor.screen_size_in_points(),
             }]),
         );
 
-        for (i, egui::ClippedPrimitive { primitive, .. }) in paint_jobs.iter().enumerate() {
+        for (i, egui::ClippedPrimitive { primitive, .. }) in paint_jobs.into_iter().enumerate() {
             match primitive {
                 Primitive::Mesh(mesh) => {
-                    let data: &[u8] = bytemuck::cast_slice(&mesh.indices);
+                    let len = mesh.indices.len();
                     if i < self.index_buffers.len() {
-                        self.update_buffer(device, queue, &BufferType::Index, i, data);
+                        self.update_buffer(
+                            device,
+                            queue,
+                            &BufferType::Index,
+                            i,
+                            bytemuck::cast_slice(&mesh.indices),
+                        );
+                        self.update_buffer(
+                            device,
+                            queue,
+                            &BufferType::Vertex,
+                            i,
+                            bytemuck::cast_slice(&mesh.vertices),
+                        );
                     } else {
-                        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("egui_index_buffer"),
-                            contents: data,
-                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                        });
+                        let idx_buffer =
+                            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("egui_index_buffer"),
+                                contents: bytemuck::cast_slice(&mesh.indices),
+                                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                            });
                         self.index_buffers.push(SizedBuffer {
-                            buffer,
-                            size: data.len(),
-                        });
-                    }
-
-                    let data: &[u8] = bytemuck::cast_slice(&mesh.vertices);
-                    if i < self.vertex_buffers.len() {
-                        self.update_buffer(device, queue, &BufferType::Vertex, i, data);
-                    } else {
-                        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("egui_vertex_buffer"),
-                            contents: data,
-                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            buffer: idx_buffer,
+                            size: len,
                         });
 
+                        let vtx_buffer =
+                            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("egui_vertex_buffer"),
+                                contents: bytemuck::cast_slice(&mesh.vertices),
+                                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                            });
                         self.vertex_buffers.push(SizedBuffer {
-                            buffer,
-                            size: data.len(),
+                            buffer: vtx_buffer,
+                            size: len,
                         });
                     }
                 }
@@ -608,11 +619,13 @@ impl RenderPass {
             ),
         };
 
-        if data.len() > buffer.size {
-            buffer.size = data.len();
+        let len = data.len();
+
+        if len > buffer.size {
+            buffer.size = len;
             buffer.buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
-                contents: bytemuck::cast_slice(data),
+                contents: data,
                 usage: storage | wgpu::BufferUsages::COPY_DST,
             });
         } else {
