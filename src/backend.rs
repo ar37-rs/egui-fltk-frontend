@@ -245,7 +245,7 @@ impl RenderPass {
                 unclipped_depth: false,
                 conservative: false,
                 cull_mode: None,
-                front_face: wgpu::FrontFace::Cw,
+                front_face: wgpu::FrontFace::default(),
                 polygon_mode: wgpu::PolygonMode::Fill,
                 strip_index_format: None,
             },
@@ -494,6 +494,7 @@ impl RenderPass {
                 mag_filter: wgpu::FilterMode::Linear,
                 min_filter: wgpu::FilterMode::Linear,
                 mipmap_filter: wgpu::FilterMode::Linear,
+                lod_max_clamp: 128.0,
                 ..Default::default()
             });
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
