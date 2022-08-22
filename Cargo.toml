@@ -1,8 +1,8 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.19.7"
+version = "0.20.0"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = "1.61.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 description = "FLTK frontend for Egui WGPU backend"
 documentation = "https://docs.rs/egui-fltk-frontend"
@@ -16,13 +16,14 @@ exclude = ["screenshot/"]
 
 [dependencies]
 bytemuck = "1"
-egui = { version = "0.18", features = ["bytemuck"] }
+egui = { version = "0.19", features = ["bytemuck"] }
 # internal use case only
 # fltk = { version = "1.3", features = ["raw-window-handle", "fltk-bundled", "enable-glwindow"] }
 fltk = { version = "1.3", features = ["raw-window-handle"] }
 pollster = "0.2"
 wgpu = { version = "0.13" }
 fxhash = "0.2"
+type-map = "0.5"
 
 [target."cfg(windows)".dependencies.copypasta]
 version = "0.8"
@@ -68,5 +69,5 @@ name = "smaa"
 required-features = ["fltk-enable-glwindow"]
 
 [dev-dependencies]
-egui_demo_lib = "0.18"
+egui_demo_lib = "0.19"
 smaa = "0.7"

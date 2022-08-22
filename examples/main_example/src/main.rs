@@ -28,7 +28,7 @@ fn main() {
     window.make_current();
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
-    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    let instance = wgpu::Instance::new(wgpu::Backends::DX12);
     let surface = unsafe { instance.create_surface(&window) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
@@ -113,7 +113,7 @@ fn main() {
         let window_resized = state.window_resized();
 
         // Make sure to put timer.elapsed() on the last order.
-        if app_output.needs_repaint
+        if app_output.repaint_after.is_zero()
             || window_resized
             || state.mouse_btn_pressed()
             || timer.elapsed()

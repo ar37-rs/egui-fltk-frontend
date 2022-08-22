@@ -132,7 +132,7 @@ impl Painter {
         self.render_pass
             .update_buffers(device, queue, &clipped_primitive, screen_descriptor);
         self.render_pass
-            .execute_with_renderpass(rpass, clipped_primitive, screen_descriptor);
+            .execute_with_renderpass(rpass, &clipped_primitive, screen_descriptor);
     }
 
     pub fn paint_jobs(
@@ -183,7 +183,7 @@ impl Painter {
                     &frame
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default()),
-                    clipped_primitive,
+                    &clipped_primitive,
                     &screen_descriptor,
                     Some(wgpu::Color::BLACK),
                 );
@@ -633,7 +633,11 @@ pub trait EguiImageConvertible<I>
 where
     I: ImageExt,
 {
-    fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError>;
+    fn egui_image(
+        self,
+        debug_name: &str,
+        filter: egui::TextureFilter,
+    ) -> Result<RetainedEguiImage, FltkError>;
 }
 
 impl<I> EguiImageConvertible<I> for I
@@ -641,7 +645,11 @@ where
     I: ImageExt,
 {
     /// Return (egui_extras::RetainedEguiImage)
-    fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
+    fn egui_image(
+        self,
+        debug_name: &str,
+        filter: egui::TextureFilter,
+    ) -> Result<RetainedEguiImage, FltkError> {
         let size = [self.data_w() as _, self.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
@@ -651,17 +659,29 @@ where
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(
+            debug_name,
+            color_image,
+            filter,
+        ))
     }
 }
 
 pub trait EguiSvgConvertible {
-    fn egui_svg_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError>;
+    fn egui_svg_image(
+        self,
+        debug_name: &str,
+        filter: egui::TextureFilter,
+    ) -> Result<RetainedEguiImage, FltkError>;
 }
 
 impl EguiSvgConvertible for fltk::image::SvgImage {
     /// Return (egui_extras::RetainedEguiImage)
-    fn egui_svg_image(mut self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
+    fn egui_svg_image(
+        mut self,
+        debug_name: &str,
+        filter: egui::TextureFilter,
+    ) -> Result<RetainedEguiImage, FltkError> {
         self.normalize();
         let size = [self.data_w() as usize, self.data_h() as usize];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
@@ -672,7 +692,11 @@ impl EguiSvgConvertible for fltk::image::SvgImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(
+            debug_name,
+            color_image,
+            filter,
+        ))
     }
 }
 /// egui::ColorImage Extender.
@@ -714,6 +738,7 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         vec: Vec<u8>,
+        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 
     fn from_u8_slice(
@@ -721,6 +746,7 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         slice: &[u8],
+        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 
     fn from_vec_color32(
@@ -728,6 +754,7 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         vec: Vec<egui::Color32>,
+        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 
     fn from_color32_slice(
@@ -735,14 +762,21 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         slice: &[egui::Color32],
+        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 }
 
 impl TextureHandleExt for egui::TextureHandle {
-    fn from_vec_u8(ctx: &egui::Context, debug_name: &str, size: [usize; 2], vec: Vec<u8>) -> Self {
+    fn from_vec_u8(
+        ctx: &egui::Context,
+        debug_name: &str,
+        size: [usize; 2],
+        vec: Vec<u8>,
+        filter: egui::TextureFilter,
+    ) -> Self {
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &vec);
         drop(vec);
-        ctx.load_texture(debug_name, color_image)
+        ctx.load_texture(debug_name, color_image, filter)
     }
 
     fn from_u8_slice(
@@ -750,9 +784,10 @@ impl TextureHandleExt for egui::TextureHandle {
         debug_name: &str,
         size: [usize; 2],
         slice: &[u8],
+        filter: egui::TextureFilter,
     ) -> Self {
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, slice);
-        ctx.load_texture(debug_name, color_image)
+        ctx.load_texture(debug_name, color_image, filter)
     }
 
     fn from_vec_color32(
@@ -760,6 +795,7 @@ impl TextureHandleExt for egui::TextureHandle {
         debug_name: &str,
         size: [usize; 2],
         vec: Vec<egui::Color32>,
+        filter: egui::TextureFilter,
     ) -> Self {
         let mut pixels: Vec<u8> = Vec::with_capacity(vec.len() * 4);
         vec.into_iter().for_each(|x| {
@@ -769,7 +805,7 @@ impl TextureHandleExt for egui::TextureHandle {
             pixels.push(x[3]);
         });
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-        ctx.load_texture(debug_name, color_image)
+        ctx.load_texture(debug_name, color_image, filter)
     }
 
     fn from_color32_slice(
@@ -777,6 +813,7 @@ impl TextureHandleExt for egui::TextureHandle {
         debug_name: &str,
         size: [usize; 2],
         slice: &[egui::Color32],
+        filter: egui::TextureFilter,
     ) -> Self {
         let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
         slice.into_iter().for_each(|x| {
@@ -786,6 +823,6 @@ impl TextureHandleExt for egui::TextureHandle {
             pixels.push(x[3]);
         });
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-        ctx.load_texture(debug_name, color_image)
+        ctx.load_texture(debug_name, color_image, filter)
     }
 }

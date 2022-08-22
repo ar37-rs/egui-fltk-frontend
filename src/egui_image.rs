@@ -1,7 +1,6 @@
 // from https://github.com/emilk/egui/blob/0.17.0/egui_extras/src/image.rs
 // slightly modified for fltk image and fltk svg image
 
-use egui::ColorImage;
 use fltk::{
     enums,
     image::SvgImage,
@@ -15,27 +14,30 @@ use std::sync::Mutex;
 ///
 /// Use the `svg` and `image` features to enable more constructors.
 pub struct RetainedEguiImage {
-    debug_name: String,
-    size: [usize; 2],
+    pub debug_name: String,
+    pub size: [usize; 2],
     /// Cleared once [`Self::texture`] has been loaded.
-    image: Mutex<egui::ColorImage>,
+    pub image: Mutex<egui::ColorImage>,
     /// Lazily loaded when we have an egui context.
-    texture: Mutex<Option<egui::TextureHandle>>,
+    pub texture: Mutex<Option<egui::TextureHandle>>,
+    pub filter: egui::TextureFilter
 }
 
 impl RetainedEguiImage {
-    pub fn from_color_image(debug_name: impl Into<String>, image: ColorImage) -> Self {
+    pub fn from_color_image(debug_name: impl Into<String>, image: egui::ColorImage, filter: egui::TextureFilter) -> Self {
         Self {
             debug_name: debug_name.into(),
             size: image.size,
             image: Mutex::new(image),
             texture: Default::default(),
+            filter
         }
     }
 
     pub fn from_fltk_image<I: ImageExt>(
         debug_name: impl Into<String>,
         image: I,
+        filter: egui::TextureFilter
     ) -> Result<RetainedEguiImage, FltkError> {
         let size = [image.data_w() as _, image.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
@@ -46,12 +48,12 @@ impl RetainedEguiImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image,filter))
     }
 
     pub fn from_fltk_image_as_ref<I: ImageExt>(
         debug_name: impl Into<String>,
-        image: &I,
+        image: &I, filter: egui::TextureFilter
     ) -> Result<RetainedEguiImage, FltkError> {
         let size = [image.data_w() as _, image.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
@@ -62,12 +64,13 @@ impl RetainedEguiImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image, filter))
     }
 
     pub fn from_fltk_svg_image_as_ref(
         debug_name: impl Into<String>,
         svg_image: &mut SvgImage,
+        filter: egui::TextureFilter
     ) -> Result<RetainedEguiImage, FltkError> {
         svg_image.normalize();
         let size = [svg_image.data_w() as _, svg_image.data_h() as _];
@@ -79,12 +82,13 @@ impl RetainedEguiImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image, filter))
     }
 
     pub fn from_fltk_svg_image(
         debug_name: impl Into<String>,
         mut svg_image: SvgImage,
+        filter: egui::TextureFilter
     ) -> Result<RetainedEguiImage, FltkError> {
         svg_image.normalize();
         let size = [svg_image.data_w() as _, svg_image.data_h() as _];
@@ -96,7 +100,7 @@ impl RetainedEguiImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image, filter))
     }
 
     /// The size of the image data (number of pixels wide/high).
@@ -115,15 +119,15 @@ impl RetainedEguiImage {
         &self.debug_name
     }
 
-    /// The texture if for this image.
+    /// The texture id for this image.
     pub fn texture_id(&self, ctx: &egui::Context) -> egui::TextureId {
         self.texture
             .lock()
             .unwrap()
             .get_or_insert_with(|| {
-                let image: &mut ColorImage = &mut self.image.lock().unwrap();
+                let image: &mut egui::ColorImage = &mut self.image.lock().unwrap();
                 let image = std::mem::take(image);
-                ctx.load_texture(&self.debug_name, image)
+                ctx.load_texture(&self.debug_name, image, self.filter)
             })
             .id()
     }

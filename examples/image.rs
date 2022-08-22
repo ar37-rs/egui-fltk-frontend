@@ -99,13 +99,17 @@ fn main() {
 
     // egui image from fltk svg
     let fltk_svg_image = SvgImage::load("examples/resources/fingerprint.svg").unwrap();
-    let retained_egui_svg_image =
-        RetainedEguiImage::from_fltk_svg_image("fingerprint.svg", fltk_svg_image).unwrap();
+    let retained_egui_svg_image = RetainedEguiImage::from_fltk_svg_image(
+        "fingerprint.svg",
+        fltk_svg_image,
+        egui::TextureFilter::Linear,
+    )
+    .unwrap();
 
     // fltk image to egui image
     let retained_egui_image = JpegImage::load("examples/resources/nature.jpg")
         .unwrap()
-        .egui_image("nature.jpg")
+        .egui_image("nature.jpg", egui::TextureFilter::Linear)
         .unwrap();
 
     // Use Timer for auto repaint if the app is idle.
@@ -143,7 +147,7 @@ fn main() {
         let window_resized = state.borrow_mut().window_resized();
 
         // Make sure to put timer.elapsed() on the last order.
-        if app_output.needs_repaint
+        if app_output.repaint_after.is_zero()
             || window_resized
             || state.borrow().mouse_btn_pressed()
             || timer.elapsed()

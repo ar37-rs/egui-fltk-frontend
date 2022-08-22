@@ -1,8 +1,9 @@
-use egui::epaint::Primitive;
 use fxhash::FxHashMap;
-use std::{borrow::Cow, num::NonZeroU32};
 use wgpu;
 use wgpu::util::DeviceExt as _;
+use std::{borrow::Cow, num::NonZeroU32};
+use egui::{epaint::Primitive, NumExt, PaintCallbackInfo};
+use type_map::concurrent::TypeMap;
 
 const EGUI_WGSL: &str = r#"
 // Vertex shader bindings
@@ -11,12 +12,14 @@ struct VertexOutput {
     @location(0) tex_coord: vec2<f32>,
     @location(1) color: vec4<f32>,
     @builtin(position) position: vec4<f32>,
-}
+};
 
 struct Locals {
     screen_size: vec2<f32>,
-}
-
+    // Uniform buffers need to be at least 16 bytes in WebGL.
+    // See https://github.com/gfx-rs/wgpu/issues/2072
+    _padding: vec2<u32>,
+};
 @group(0) @binding(0) var<uniform> r_locals: Locals;
 
 // 0-1 from 0-255
@@ -75,6 +78,7 @@ fn vs_conv_main(
 }
 
 // Fragment shader bindings
+
 @group(1) @binding(0) var r_tex_color: texture_2d<f32>;
 @group(1) @binding(1) var r_tex_sampler: sampler;
 
@@ -83,6 +87,73 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return in.color * textureSample(r_tex_color, r_tex_sampler, in.tex_coord);
 }
 "#;
+
+/// A callback function that can be used to compose an [`egui::PaintCallback`] for custom WGPU
+/// rendering.
+///
+/// The callback is composed of two functions: `prepare` and `paint`.
+///
+/// `prepare` is called every frame before `paint`, and can use the passed-in [`wgpu::Device`] and
+/// [`wgpu::Buffer`] to allocate or modify GPU resources such as buffers.
+///
+/// `paint` is called after `prepare` and is given access to the the [`wgpu::RenderPass`] so that it
+/// can issue draw commands.
+///
+/// The final argument of both the `prepare` and `paint` callbacks is a the
+/// [`paint_callback_resources`][crate::renderer::RenderPass::paint_callback_resources].
+/// `paint_callback_resources` has the same lifetime as the Egui render pass, so it can be used to
+/// store buffers, pipelines, and other information that needs to be accessed during the render
+/// pass.
+///
+/// # Example
+///
+/// See the [`custom3d_glow`](https://github.com/emilk/egui/blob/master/crates/egui_demo_app/src/apps/custom3d_wgpu.rs) demo source for a detailed usage example.
+pub struct CallbackFn {
+    prepare: Box<PrepareCallback>,
+    paint: Box<PaintCallback>,
+}
+
+type PrepareCallback = dyn Fn(&wgpu::Device, &wgpu::Queue, &mut TypeMap) + Sync + Send;
+
+type PaintCallback =
+    dyn for<'a, 'b> Fn(PaintCallbackInfo, &'a mut wgpu::RenderPass<'b>, &'b TypeMap) + Sync + Send;
+
+impl Default for CallbackFn {
+    fn default() -> Self {
+        CallbackFn {
+            prepare: Box::new(|_, _, _| ()),
+            paint: Box::new(|_, _, _| ()),
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl CallbackFn {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the prepare callback
+    pub fn prepare<F>(mut self, prepare: F) -> Self
+    where
+        F: Fn(&wgpu::Device, &wgpu::Queue, &mut TypeMap) + Sync + Send + 'static,
+    {
+        self.prepare = Box::new(prepare) as _;
+        self
+    }
+
+    /// Set the paint callback
+    pub fn paint<F>(mut self, paint: F) -> Self
+    where
+        F: for<'a, 'b> Fn(PaintCallbackInfo, &'a mut wgpu::RenderPass<'b>, &'b TypeMap)
+            + Sync
+            + Send
+            + 'static,
+    {
+        self.paint = Box::new(paint) as _;
+        self
+    }
+}
 
 /// Enum for selecting the right buffer type.
 #[derive(Debug)]
@@ -116,6 +187,9 @@ impl ScreenDescriptor {
 #[repr(C)]
 struct UniformBuffer {
     screen_size_in_points: [f32; 2],
+    // Uniform buffers need to be at least 16 bytes in WebGL.
+    // See https://github.com/gfx-rs/wgpu/issues/2072
+    _padding: [u32; 2],
 }
 
 /// Wraps the buffers and includes additional information.
@@ -134,7 +208,14 @@ pub struct RenderPass {
     uniform_buffer: SizedBuffer,
     uniform_bind_group: wgpu::BindGroup,
     texture_bind_group_layout: wgpu::BindGroupLayout,
-    textures: FxHashMap<egui::TextureId, (wgpu::Texture, wgpu::BindGroup)>,
+    /// Map of egui texture IDs to textures and their associated bindgroups (texture view +
+    /// sampler). The texture may be None if the TextureId is just a handle to a user-provided
+    /// sampler.
+    textures: FxHashMap<egui::TextureId, (Option<wgpu::Texture>, wgpu::BindGroup)>,
+    next_user_texture_id: u64,
+    /// Storage for use by [`egui::PaintCallback`]'s that need to store resources such as render
+    /// pipelines that must have the lifetime of the renderpass.
+    pub paint_callback_resources: TypeMap,
 }
 
 impl RenderPass {
@@ -156,6 +237,7 @@ impl RenderPass {
             label: Some("egui_uniform_buffer"),
             contents: bytemuck::cast_slice(&[UniformBuffer {
                 screen_size_in_points: [0.0, 0.0],
+                _padding: Default::default(),
             }]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
@@ -246,14 +328,14 @@ impl RenderPass {
                 conservative: false,
                 cull_mode: None,
                 front_face: wgpu::FrontFace::default(),
-                polygon_mode: wgpu::PolygonMode::Fill,
+                polygon_mode: wgpu::PolygonMode::default(),
                 strip_index_format: None,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
                 alpha_to_coverage_enabled: false,
                 count: msaa_samples,
-                ..Default::default()
+                mask: !0,
             },
 
             fragment: Some(wgpu::FragmentState {
@@ -287,6 +369,8 @@ impl RenderPass {
             uniform_bind_group,
             texture_bind_group_layout,
             textures: FxHashMap::default(),
+            next_user_texture_id: 0,
+            paint_callback_resources: TypeMap::default(),
         }
     }
 
@@ -295,7 +379,7 @@ impl RenderPass {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
-        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
+        paint_jobs: &[egui::epaint::ClippedPrimitive],
         screen_descriptor: &ScreenDescriptor,
         clear_color: Option<wgpu::Color>,
     ) {
@@ -317,13 +401,10 @@ impl RenderPass {
             depth_stencil_attachment: None,
             label: Some("egui main render pass"),
         });
-
-        #[cfg(feature = "debug")]
         rpass.push_debug_group("egui_pass");
 
         self.execute_with_renderpass(&mut rpass, paint_jobs, screen_descriptor);
 
-        #[cfg(feature = "debug")]
         rpass.pop_debug_group();
     }
 
@@ -331,81 +412,121 @@ impl RenderPass {
     pub fn execute_with_renderpass<'rpass>(
         &'rpass self,
         rpass: &mut wgpu::RenderPass<'rpass>,
-        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
+        paint_jobs: &[egui::epaint::ClippedPrimitive],
         screen_descriptor: &ScreenDescriptor,
     ) {
-        rpass.set_pipeline(&self.render_pipeline);
-
-        rpass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
         let pixels_per_point = screen_descriptor.pixels_per_point;
         let size_in_pixels = screen_descriptor.size_in_pixels;
 
-        let index_buffers = &self.index_buffers;
-        let vertex_buffers = &self.vertex_buffers;
-        let textures = &self.textures;
-        for (
-            i,
-            egui::ClippedPrimitive {
-                clip_rect,
-                primitive,
-            },
-        ) in paint_jobs.into_iter().enumerate()
+        // Whether or not we need to reset the renderpass state because a paint callback has just
+        // run.
+        let mut needs_reset = true;
+
+        let mut index_buffers = self.index_buffers.iter();
+        let mut vertex_buffers = self.vertex_buffers.iter();
+
+        for egui::ClippedPrimitive {
+            clip_rect,
+            primitive,
+        } in paint_jobs
         {
-            // Transform clip rect to physical pixels.
-            let clip_min_x = pixels_per_point * clip_rect.min.x;
-            let clip_min_y = pixels_per_point * clip_rect.min.y;
-            let clip_max_x = pixels_per_point * clip_rect.max.x;
-            let clip_max_y = pixels_per_point * clip_rect.max.y;
-
-            // Make sure clip rect can fit within an `u32`.
-            let clip_min_x = clip_min_x.clamp(0.0, size_in_pixels[0] as f32);
-            let clip_min_y = clip_min_y.clamp(0.0, size_in_pixels[1] as f32);
-            let clip_max_x = clip_max_x.clamp(clip_min_x, size_in_pixels[0] as f32);
-            let clip_max_y = clip_max_y.clamp(clip_min_y, size_in_pixels[1] as f32);
-
-            let clip_min_x = clip_min_x.round() as u32;
-            let clip_min_y = clip_min_y.round() as u32;
-            let clip_max_x = clip_max_x.round() as u32;
-            let clip_max_y = clip_max_y.round() as u32;
-
-            let width = (clip_max_x - clip_min_x).max(1);
-            let height = (clip_max_y - clip_min_y).max(1);
+            if needs_reset {
+                rpass.set_viewport(
+                    0.0,
+                    0.0,
+                    size_in_pixels[0] as f32,
+                    size_in_pixels[1] as f32,
+                    0.0,
+                    1.0,
+                );
+                rpass.set_pipeline(&self.render_pipeline);
+                rpass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                needs_reset = false;
+            }
 
             {
-                // Clip scissor rectangle to target size.
-                let x = clip_min_x.min(size_in_pixels[0]);
-                let y = clip_min_y.min(size_in_pixels[1]);
-                let width = width.min(size_in_pixels[0] - x);
-                let height = height.min(size_in_pixels[1] - y);
+                let rect = ScissorRect::new(clip_rect, pixels_per_point, size_in_pixels);
 
-                // Skip rendering with zero-sized clip areas.
-                if width == 0 || height == 0 {
+                if rect.width == 0 || rect.height == 0 {
+                    // Skip rendering with zero-sized clip areas.
+                    if let Primitive::Mesh(_) = primitive {
+                        // If this is a mesh, we need to advance the index and vertex buffer iterators
+                        index_buffers.next().unwrap();
+                        vertex_buffers.next().unwrap();
+                    }
                     continue;
                 }
 
-                rpass.set_scissor_rect(x, y, width, height);
+                rpass.set_scissor_rect(rect.x, rect.y, rect.width, rect.height);
             }
 
             match primitive {
                 Primitive::Mesh(mesh) => {
-                    if let Some((_texture, bind_group)) = textures.get(&mesh.texture_id) {
+                    let index_buffer = index_buffers.next().unwrap();
+                    let vertex_buffer = vertex_buffers.next().unwrap();
+
+                    if let Some((_texture, bind_group)) = self.textures.get(&mesh.texture_id) {
                         rpass.set_bind_group(1, bind_group, &[]);
                         rpass.set_index_buffer(
-                            index_buffers[i].buffer.slice(..),
+                            index_buffer.buffer.slice(..),
                             wgpu::IndexFormat::Uint32,
                         );
-                        rpass.set_vertex_buffer(0, vertex_buffers[i].buffer.slice(..));
+                        rpass.set_vertex_buffer(0, vertex_buffer.buffer.slice(..));
                         rpass.draw_indexed(0..mesh.indices.len() as u32, 0, 0..1);
                     } else {
                         eprintln!("Missing texture: {:?}", mesh.texture_id);
                     }
                 }
-                Primitive::Callback(_) => {
-                    // already warned about earlier
+                Primitive::Callback(callback) => {
+                    let cbfn = if let Some(c) = callback.callback.downcast_ref::<CallbackFn>() {
+                        c
+                    } else {
+                        // We already warned in the `prepare` callback
+                        continue;
+                    };
+
+                    if callback.rect.is_positive() {
+                        needs_reset = true;
+
+                        {
+                            // Set the viewport rect
+                            // Transform callback rect to physical pixels:
+                            let rect_min_x = pixels_per_point * callback.rect.min.x;
+                            let rect_min_y = pixels_per_point * callback.rect.min.y;
+                            let rect_max_x = pixels_per_point * callback.rect.max.x;
+                            let rect_max_y = pixels_per_point * callback.rect.max.y;
+
+                            let rect_min_x = rect_min_x.round();
+                            let rect_min_y = rect_min_y.round();
+                            let rect_max_x = rect_max_x.round();
+                            let rect_max_y = rect_max_y.round();
+
+                            rpass.set_viewport(
+                                rect_min_x,
+                                rect_min_y,
+                                rect_max_x - rect_min_x,
+                                rect_max_y - rect_min_y,
+                                0.0,
+                                1.0,
+                            );
+                        }
+
+                        (cbfn.paint)(
+                            PaintCallbackInfo {
+                                viewport: callback.rect,
+                                clip_rect: *clip_rect,
+                                pixels_per_point,
+                                screen_size_px: size_in_pixels,
+                            },
+                            rpass,
+                            &self.paint_callback_resources,
+                        );
+                    }
                 }
             }
         }
+
+        rpass.set_scissor_rect(0, 0, size_in_pixels[0], size_in_pixels[1]);
     }
 
     /// Should be called before `execute()`.
@@ -443,9 +564,9 @@ impl RenderPass {
                 Cow::Owned(image.srgba_pixels(1.0).collect::<Vec<_>>())
             }
         };
+        let data_bytes: &[u8] = bytemuck::cast_slice(data_color32.as_slice());
 
         let queue_write_data_to_texture = |texture, origin| {
-            let data_bytes: &[u8] = bytemuck::cast_slice(&data_color32);
             queue.write_texture(
                 wgpu::ImageCopyTexture {
                     texture,
@@ -474,7 +595,10 @@ impl RenderPass {
                 y: pos[1] as u32,
                 z: 0,
             };
-            queue_write_data_to_texture(texture, origin);
+            queue_write_data_to_texture(
+                texture.as_ref().expect("Tried to update user texture."),
+                origin,
+            );
         } else {
             // allocate a new texture
             let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -486,15 +610,14 @@ impl RenderPass {
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             });
+            let filter = match image_delta.filter {
+                egui::TextureFilter::Nearest => wgpu::FilterMode::Nearest,
+                egui::TextureFilter::Linear => wgpu::FilterMode::Linear,
+            };
             let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
                 label: None,
-                address_mode_u: wgpu::AddressMode::ClampToEdge,
-                address_mode_v: wgpu::AddressMode::ClampToEdge,
-                address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter: wgpu::FilterMode::Linear,
-                min_filter: wgpu::FilterMode::Linear,
-                mipmap_filter: wgpu::FilterMode::Linear,
-                lod_max_clamp: 128.0,
+                mag_filter: filter,
+                min_filter: filter,
                 ..Default::default()
             });
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -515,13 +638,103 @@ impl RenderPass {
             });
             let origin = wgpu::Origin3d::ZERO;
             queue_write_data_to_texture(&texture, origin);
-            self.textures.insert(id, (texture, bind_group));
+            self.textures.insert(id, (Some(texture), bind_group));
         };
     }
 
-    /// Should be called before `execute()`.
     pub fn free_texture(&mut self, id: &egui::TextureId) {
         self.textures.remove(id);
+    }
+
+    /// Get the WGPU texture and bind group associated to a texture that has been allocated by egui.
+    ///
+    /// This could be used by custom paint hooks to render images that have been added through with
+    /// [`egui_extras::RetainedImage`](https://docs.rs/egui_extras/latest/egui_extras/image/struct.RetainedImage.html)
+    /// or [`egui::Context::load_texture`].
+    pub fn texture(
+        &self,
+        id: &egui::TextureId,
+    ) -> Option<&(Option<wgpu::Texture>, wgpu::BindGroup)> {
+        self.textures.get(id)
+    }
+
+    /// Registers a `wgpu::Texture` with a `egui::TextureId`.
+    ///
+    /// This enables the application to reference the texture inside an image ui element.
+    /// This effectively enables off-screen rendering inside the egui UI. Texture must have
+    /// the texture format `TextureFormat::Rgba8UnormSrgb` and
+    /// Texture usage `TextureUsage::SAMPLED`.
+    pub fn register_native_texture(
+        &mut self,
+        device: &wgpu::Device,
+        texture: &wgpu::TextureView,
+        texture_filter: wgpu::FilterMode,
+    ) -> egui::TextureId {
+        self.register_native_texture_with_sampler_options(
+            device,
+            texture,
+            wgpu::SamplerDescriptor {
+                label: Some(
+                    format!(
+                        "egui_user_image_{}_texture_sampler",
+                        self.next_user_texture_id
+                    )
+                    .as_str(),
+                ),
+                mag_filter: texture_filter,
+                min_filter: texture_filter,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Registers a `wgpu::Texture` with a `egui::TextureId` while also accepting custom
+    /// `wgpu::SamplerDescriptor` options.
+    ///
+    /// This allows applications to specify individual minification/magnification filters as well as
+    /// custom mipmap and tiling options.
+    ///
+    /// The `Texture` must have the format `TextureFormat::Rgba8UnormSrgb` and usage
+    /// `TextureUsage::SAMPLED`. Any compare function supplied in the `SamplerDescriptor` will be
+    /// ignored.
+    #[allow(clippy::needless_pass_by_value)] // false positive
+    pub fn register_native_texture_with_sampler_options(
+        &mut self,
+        device: &wgpu::Device,
+        texture: &wgpu::TextureView,
+        sampler_descriptor: wgpu::SamplerDescriptor<'_>,
+    ) -> egui::TextureId {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            compare: None,
+            ..sampler_descriptor
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(
+                format!(
+                    "egui_user_image_{}_texture_bind_group",
+                    self.next_user_texture_id
+                )
+                .as_str(),
+            ),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(texture),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        let id = egui::TextureId::User(self.next_user_texture_id);
+        self.textures.insert(id, (None, bind_group));
+        self.next_user_texture_id += 1;
+
+        id
     }
 
     /// Uploads the uniform, vertex and index data used by the render pass.
@@ -533,61 +746,65 @@ impl RenderPass {
         paint_jobs: &[egui::epaint::ClippedPrimitive],
         screen_descriptor: &ScreenDescriptor,
     ) {
+        let screen_size_in_points = screen_descriptor.screen_size_in_points();
+
         self.update_buffer(
             device,
             queue,
             &BufferType::Uniform,
             0,
             bytemuck::cast_slice(&[UniformBuffer {
-                screen_size_in_points: screen_descriptor.screen_size_in_points(),
+                screen_size_in_points,
+                _padding: Default::default(),
             }]),
         );
 
-        for (i, egui::ClippedPrimitive { primitive, .. }) in paint_jobs.into_iter().enumerate() {
+        let mut mesh_idx = 0;
+        for egui::ClippedPrimitive { primitive, .. } in paint_jobs.iter() {
             match primitive {
                 Primitive::Mesh(mesh) => {
-                    let len = mesh.indices.len();
-                    if i < self.index_buffers.len() {
-                        self.update_buffer(
-                            device,
-                            queue,
-                            &BufferType::Index,
-                            i,
-                            bytemuck::cast_slice(&mesh.indices),
-                        );
-                        self.update_buffer(
-                            device,
-                            queue,
-                            &BufferType::Vertex,
-                            i,
-                            bytemuck::cast_slice(&mesh.vertices),
-                        );
+                    let data: &[u8] = bytemuck::cast_slice(&mesh.indices);
+                    if mesh_idx < self.index_buffers.len() {
+                        self.update_buffer(device, queue, &BufferType::Index, mesh_idx, data);
                     } else {
-                        let idx_buffer =
-                            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("egui_index_buffer"),
-                                contents: bytemuck::cast_slice(&mesh.indices),
-                                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                            });
-                        self.index_buffers.push(SizedBuffer {
-                            buffer: idx_buffer,
-                            size: len,
+                        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("egui_index_buffer"),
+                            contents: data,
+                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                         });
-
-                        let vtx_buffer =
-                            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("egui_vertex_buffer"),
-                                contents: bytemuck::cast_slice(&mesh.vertices),
-                                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                            });
-                        self.vertex_buffers.push(SizedBuffer {
-                            buffer: vtx_buffer,
-                            size: len,
+                        self.index_buffers.push(SizedBuffer {
+                            buffer,
+                            size: data.len(),
                         });
                     }
+
+                    let data: &[u8] = bytemuck::cast_slice(&mesh.vertices);
+                    if mesh_idx < self.vertex_buffers.len() {
+                        self.update_buffer(device, queue, &BufferType::Vertex, mesh_idx, data);
+                    } else {
+                        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some("egui_vertex_buffer"),
+                            contents: data,
+                            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                        });
+
+                        self.vertex_buffers.push(SizedBuffer {
+                            buffer,
+                            size: data.len(),
+                        });
+                    }
+
+                    mesh_idx += 1;
                 }
-                Primitive::Callback(_) => {
-                    eprintln!("Painting callbacks not supported by egui-wgpu (yet)");
+                Primitive::Callback(callback) => {
+                    let cbfn = if let Some(c) = callback.callback.downcast_ref::<CallbackFn>() {
+                        c
+                    } else {
+                        eprintln!("Unknown paint callback: expected `egui_gpu::CallbackFn`");
+                        continue;
+                    };
+
+                    (cbfn.prepare)(device, queue, &mut self.paint_callback_resources);
                 }
             }
         }
@@ -620,17 +837,61 @@ impl RenderPass {
             ),
         };
 
-        let len = data.len();
-
-        if len > buffer.size {
-            buffer.size = len;
+        if data.len() > buffer.size {
+            buffer.size = data.len();
             buffer.buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
-                contents: data,
+                contents: bytemuck::cast_slice(data),
                 usage: storage | wgpu::BufferUsages::COPY_DST,
             });
         } else {
             queue.write_buffer(&buffer.buffer, 0, data);
         }
     }
+}
+
+/// A Rect in physical pixel space, used for setting cliipping rectangles.
+struct ScissorRect {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl ScissorRect {
+    fn new(clip_rect: &egui::Rect, pixels_per_point: f32, target_size: [u32; 2]) -> Self {
+        // Transform clip rect to physical pixels:
+        let clip_min_x = pixels_per_point * clip_rect.min.x;
+        let clip_min_y = pixels_per_point * clip_rect.min.y;
+        let clip_max_x = pixels_per_point * clip_rect.max.x;
+        let clip_max_y = pixels_per_point * clip_rect.max.y;
+
+        // Round to integer:
+        let clip_min_x = clip_min_x.round() as u32;
+        let clip_min_y = clip_min_y.round() as u32;
+        let clip_max_x = clip_max_x.round() as u32;
+        let clip_max_y = clip_max_y.round() as u32;
+
+        // Clamp:
+        let clip_min_x = clip_min_x.clamp(0, target_size[0]);
+        let clip_min_y = clip_min_y.clamp(0, target_size[1]);
+        let clip_max_x = clip_max_x.clamp(clip_min_x, target_size[0]);
+        let clip_max_y = clip_max_y.clamp(clip_min_y, target_size[1]);
+
+        let width = (clip_max_x - clip_min_x).at_least(1);
+        let height = (clip_max_y - clip_min_y).at_least(1);
+
+        ScissorRect {
+            x: clip_min_x,
+            y: clip_min_y,
+            width,
+            height,
+        }
+    }
+}
+
+#[test]
+fn render_pass_impl_send_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<RenderPass>();
 }

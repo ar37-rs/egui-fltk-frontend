@@ -210,7 +210,7 @@ fn main() {
         let window_resized = state.borrow_mut().window_resized();
 
         // Make sure to put timer.elapsed() on the last order.
-        if app_output.needs_repaint
+        if app_output.repaint_after.is_zero()
             || window_resized
             || state.borrow().mouse_btn_pressed()
             || timer.elapsed()
