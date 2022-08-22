@@ -1,3 +1,5 @@
+// source: https://github.com/emilk/egui/blob/master/crates/egui-wgpu/src/renderer.rs modified for FLTK
+
 use fxhash::FxHashMap;
 use wgpu;
 use wgpu::util::DeviceExt as _;
@@ -379,7 +381,7 @@ impl RenderPass {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         color_attachment: &wgpu::TextureView,
-        paint_jobs: &[egui::epaint::ClippedPrimitive],
+        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         screen_descriptor: &ScreenDescriptor,
         clear_color: Option<wgpu::Color>,
     ) {
@@ -412,7 +414,7 @@ impl RenderPass {
     pub fn execute_with_renderpass<'rpass>(
         &'rpass self,
         rpass: &mut wgpu::RenderPass<'rpass>,
-        paint_jobs: &[egui::epaint::ClippedPrimitive],
+        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
         screen_descriptor: &ScreenDescriptor,
     ) {
         let pixels_per_point = screen_descriptor.pixels_per_point;
@@ -445,7 +447,7 @@ impl RenderPass {
             }
 
             {
-                let rect = ScissorRect::new(clip_rect, pixels_per_point, size_in_pixels);
+                let rect = ScissorRect::new(&clip_rect, pixels_per_point, size_in_pixels);
 
                 if rect.width == 0 || rect.height == 0 {
                     // Skip rendering with zero-sized clip areas.
@@ -514,7 +516,7 @@ impl RenderPass {
                         (cbfn.paint)(
                             PaintCallbackInfo {
                                 viewport: callback.rect,
-                                clip_rect: *clip_rect,
+                                clip_rect: clip_rect,
                                 pixels_per_point,
                                 screen_size_px: size_in_pixels,
                             },
@@ -888,10 +890,4 @@ impl ScissorRect {
             height,
         }
     }
-}
-
-#[test]
-fn render_pass_impl_send_sync() {
-    fn assert_send_sync<T: Send + Sync>() {}
-    assert_send_sync::<RenderPass>();
 }

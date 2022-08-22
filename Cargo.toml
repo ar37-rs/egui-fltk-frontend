@@ -65,6 +65,10 @@ name = "main"
 required-features = ["fltk-enable-glwindow"]
 
 [[example]]
+name = "custom3d"
+required-features = ["fltk-enable-glwindow"]
+
+[[example]]
 name = "smaa"
 required-features = ["fltk-enable-glwindow"]
 

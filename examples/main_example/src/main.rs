@@ -28,7 +28,7 @@ fn main() {
     window.make_current();
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
-    let instance = wgpu::Instance::new(wgpu::Backends::DX12);
+    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
     let surface = unsafe { instance.create_surface(&window) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
@@ -62,9 +62,9 @@ fn main() {
 
     // Prepare back and front.
     let render_pass = RenderPass::new(&device, texture_format, 1);
-    let (mut painter, state) =
+    let (mut painter, mut state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
-
+    state.set_visual_scale(1.5);
     // Create egui state
     let state = Rc::new(RefCell::new(state));
 

@@ -2,7 +2,7 @@ pub use egui;
 use egui::{pos2, vec2, CursorIcon, Event, Rect, Vec2};
 pub use egui_image::RetainedEguiImage;
 mod backend;
-pub use backend::{RenderPass, ScreenDescriptor};
+pub use backend::{RenderPass, ScreenDescriptor, CallbackFn};
 pub use fltk;
 use fltk::{
     app,
@@ -132,7 +132,7 @@ impl Painter {
         self.render_pass
             .update_buffers(device, queue, &clipped_primitive, screen_descriptor);
         self.render_pass
-            .execute_with_renderpass(rpass, &clipped_primitive, screen_descriptor);
+            .execute_with_renderpass(rpass, clipped_primitive, screen_descriptor);
     }
 
     pub fn paint_jobs(
@@ -183,7 +183,7 @@ impl Painter {
                     &frame
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default()),
-                    &clipped_primitive,
+                    clipped_primitive,
                     &screen_descriptor,
                     Some(wgpu::Color::BLACK),
                 );
