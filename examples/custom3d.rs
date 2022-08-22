@@ -63,7 +63,7 @@ fn main() {
 
     // Prepare back and front.
     let render_pass = RenderPass::new(&device, texture_format, 1);
-    let (mut painter, mut state) =
+    let (mut painter, state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);    
 
     // Create egui state

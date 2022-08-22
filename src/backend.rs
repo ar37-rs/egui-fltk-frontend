@@ -516,7 +516,7 @@ impl RenderPass {
                         (cbfn.paint)(
                             PaintCallbackInfo {
                                 viewport: callback.rect,
-                                clip_rect: clip_rect,
+                                clip_rect,
                                 pixels_per_point,
                                 screen_size_px: size_in_pixels,
                             },

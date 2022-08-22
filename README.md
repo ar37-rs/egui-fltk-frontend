@@ -31,7 +31,7 @@ On pure wayland only desktop enable-features:
 
 ```toml
 [dependencies]
-egui-fltk-frontend = { version = "0.19", features = ["wayland"] }
+egui-fltk-frontend = { version = "0.20", features = ["wayland"] }
 ```
 
 Note:
@@ -45,6 +45,7 @@ Running example *.rs files:
 cargo r --example image
 cargo r --example main --features="fltk-enable-glwindow"
 cargo r --example smaa --features="fltk-enable-glwindow"
+cargo r --example custom3d --features="fltk-enable-glwindow"
 ```
 
 or [click here](https://github.com/Ar37-rs/egui-fltk-frontend/tree/main/examples) on how to use it inside Cargo.toml
