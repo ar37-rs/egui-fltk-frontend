@@ -1,4 +1,3 @@
-use std::{sync::Arc, borrow::Cow};
 use egui_fltk_frontend as frontend;
 use frontend::{
     egui,
@@ -8,11 +7,12 @@ use frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    pollster, wgpu::{self, util::DeviceExt}, RenderPass, Timer,
-    CallbackFn, Painter
+    pollster,
+    wgpu::{self, util::DeviceExt},
+    CallbackFn, Painter, RenderPass, Timer,
 };
+use std::{borrow::Cow, sync::Arc};
 use std::{cell::RefCell, rc::Rc, time::Instant};
-
 
 fn main() {
     let fltk_app = app::App::default();
@@ -64,7 +64,7 @@ fn main() {
     // Prepare back and front.
     let render_pass = RenderPass::new(&device, texture_format, 1);
     let (mut painter, state) =
-        frontend::begin_with(&mut window, render_pass, surface, surface_config);    
+        frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -119,7 +119,6 @@ fn main() {
                             ui.label(" (Portable Rust graphics API awesomeness)");
                         });
                         ui.label("It's not a very impressive demo, but it shows you can embed 3D inside of egui.");
-    
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
                             custom3d.custom_painting(ui);
                         });
@@ -145,7 +144,6 @@ fn main() {
         }
     }
 }
-
 
 const CUSTOM3D_WGPU_SHADER: &str = r#"
 struct VertexOut {
@@ -261,7 +259,8 @@ impl Custom3d {
         // Because the graphics pipeline must have the same lifetime as the egui render pass,
         // instead of storing the pipeline in our `Custom3D` struct, we insert it into the
         // `paint_callback_resources` type map, which is stored alongside the render pass.
-       painter.render_pass
+        painter
+            .render_pass
             .paint_callback_resources
             .insert(TriangleRenderResources {
                 pipeline,

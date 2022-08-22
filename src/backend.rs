@@ -1,11 +1,11 @@
 // source: https://github.com/emilk/egui/blob/master/crates/egui-wgpu/src/renderer.rs modified for FLTK
 
+use egui::{epaint::Primitive, NumExt, PaintCallbackInfo};
 use fxhash::FxHashMap;
+use std::{borrow::Cow, num::NonZeroU32};
+use type_map::concurrent::TypeMap;
 use wgpu;
 use wgpu::util::DeviceExt as _;
-use std::{borrow::Cow, num::NonZeroU32};
-use egui::{epaint::Primitive, NumExt, PaintCallbackInfo};
-use type_map::concurrent::TypeMap;
 
 const EGUI_WGSL: &str = r#"
 // Vertex shader bindings

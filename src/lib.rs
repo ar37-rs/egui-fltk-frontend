@@ -2,7 +2,7 @@ pub use egui;
 use egui::{pos2, vec2, CursorIcon, Event, Rect, Vec2};
 pub use egui_image::RetainedEguiImage;
 mod backend;
-pub use backend::{RenderPass, ScreenDescriptor, CallbackFn};
+pub use backend::{CallbackFn, RenderPass, ScreenDescriptor};
 pub use fltk;
 use fltk::{
     app,
