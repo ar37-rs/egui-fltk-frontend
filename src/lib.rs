@@ -55,6 +55,7 @@ where
     W: WindowExt + PPU,
 {
     app::set_screen_scale(window.screen_num(), 1.0);
+    app::keyboard_screen_scaling(false);
     let ppu = window.pixels_per_unit();
     let x = window.width();
     let y = window.height();
