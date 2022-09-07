@@ -43,4 +43,3 @@ fn init_arboard() -> Option<arboard::Clipboard> {
         }
     }
 }
-
