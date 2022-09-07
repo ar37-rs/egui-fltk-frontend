@@ -31,11 +31,11 @@ On pure wayland only desktop enable-features:
 
 ```toml
 [dependencies]
-egui-fltk-frontend = { version = "0.20", features = ["wayland"] }
+egui-fltk-frontend = { version = "0.21", features = ["wayland"] }
 ```
 
 Note:
-on xwayland based desktop (like gnome 42+) doesn't require to enable the "wayland" features.
+on xwayland based desktop (like gnome 41+) doesn't require to enable the "wayland" features.
 
 ## Example
 
