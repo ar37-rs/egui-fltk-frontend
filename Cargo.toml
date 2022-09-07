@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.20.0"
+version = "0.21.0"
 edition = "2021"
 rust-version = "1.61.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
@@ -20,27 +20,27 @@ bytemuck = "1"
 egui = { version = "0.19", features = ["bytemuck"] }
 # internal use case only
 # fltk = { version = "1.3", features = ["raw-window-handle", "fltk-bundled", "enable-glwindow"] }
-fltk = { version = "1.3", features = ["raw-window-handle"] }
+fltk = { version = ">=1.3.14,<2.0.0", features = ["raw-window-handle"] }
+raw-window-handle = "0.4"
 pollster = "0.2"
 wgpu = { version = "0.13" }
 fxhash = "0.2"
 type-map = "0.5"
 
-[target."cfg(windows)".dependencies.copypasta]
-version = "0.8"
+[target."cfg(windows)".dependencies.arboard]
+version = "2"
 
-[target."cfg(all(unix, not(any(target_os=\"linux\", target_os=\"freebsd\"))))".dependencies.copypasta]
-version = "0.8"
+[target."cfg(all(unix, not(any(target_os=\"linux\", target_os=\"freebsd\"))))".dependencies.arboard]
+version = "2"
 
-[target."cfg(all(unix, any(target_os=\"linux\", target_os=\"freebsd\")))".dependencies.copypasta]
-version = "0.8"
+[target."cfg(all(unix, any(target_os=\"linux\", target_os=\"freebsd\")))".dependencies.arboard]
+version = "2"
 default-features = false
 
 [features]
-default = ["x11"]
+default = []
 debug = []
-x11 = ["copypasta/x11"]
-wayland = ["x11", "copypasta/wayland", "fltk/use-wayland"]
+wayland = ["fltk/use-wayland"]
 fltk-enable-glwindow = ["fltk/enable-glwindow"]
 fltk-bundled = ["fltk/fltk-bundled"]
 fltk-shared = ["fltk/fltk-shared"]

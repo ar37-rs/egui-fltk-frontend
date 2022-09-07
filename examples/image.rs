@@ -7,7 +7,7 @@ use egui_fltk_frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    pollster, wgpu, EguiImageConvertible, RenderPass, RetainedEguiImage, Timer,
+    pollster, wgpu, EguiImageConvertible, RWHandleExt, RenderPass, RetainedEguiImage, Timer,
 };
 use fltk::image::{JpegImage, SvgImage};
 use std::{cell::RefCell, rc::Rc, time::Instant};
@@ -27,7 +27,7 @@ fn main() {
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
-    let surface = unsafe { instance.create_surface(&window) };
+    let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

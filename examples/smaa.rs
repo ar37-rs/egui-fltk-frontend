@@ -9,7 +9,7 @@ use egui_fltk_frontend::{
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    pollster, wgpu, RenderPass, Timer,
+    pollster, wgpu, RWHandleExt, RenderPass, Timer,
 };
 
 use std::borrow::Cow;
@@ -33,7 +33,7 @@ fn main() {
 
     // SMAA support on vulkan and gl backends only.
     let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
-    let surface = unsafe { instance.create_surface(&window) };
+    let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {

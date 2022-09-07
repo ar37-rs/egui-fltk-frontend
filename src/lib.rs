@@ -827,3 +827,86 @@ impl TextureHandleExt for egui::TextureHandle {
         ctx.load_texture(debug_name, color_image, filter)
     }
 }
+
+/// Compat trait ext for RawWindowHandle 4.x
+///
+pub trait RWHandleExt {
+    /// use raw-window-handle 4.x compatible
+    fn use_compat(&self) -> RwhCompat;
+}
+
+impl RWHandleExt for fltk::window::Window {
+    fn use_compat(&self) -> RwhCompat {
+        RwhCompat(self.raw_handle())
+    }
+}
+
+#[cfg(feature = "fltk-enable-glwindow")]
+impl RWHandleExt for fltk::window::GlWindow {
+    fn use_compat(&self) -> RwhCompat {
+        RwhCompat(self.raw_handle())
+    }
+}
+
+/// Compat for RawWindowHandle 4.x
+///
+pub struct RwhCompat(fltk::window::RawHandle);
+
+unsafe impl raw_window_handle::HasRawWindowHandle for RwhCompat {
+    fn raw_window_handle(&self) -> raw_window_handle::RawWindowHandle {
+        #[cfg(target_os = "windows")]
+        {
+            let mut handle = raw_window_handle::Win32Handle::empty();
+            handle.hwnd = self.0;
+            handle.hinstance = fltk::app::display();
+            return raw_window_handle::RawWindowHandle::Win32(handle);
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            use std::os::raw::c_void;
+
+            let raw = self.0;
+            extern "C" {
+                pub fn cfltk_getContentView(xid: *mut c_void) -> *mut c_void;
+            }
+            let cv = unsafe { cfltk_getContentView(raw) };
+            let mut handle = raw_window_handle::AppKitHandle::empty();
+            handle.ns_window = raw;
+            handle.ns_view = cv as _;
+            return raw_window_handle::RawWindowHandle::AppKit(handle);
+        }
+
+        #[cfg(target_os = "android")]
+        {
+            let mut handle = raw_window_handle::AndroidNdkHandle::empty();
+            handle.a_native_window = self.0;
+            return raw_window_handle::RawWindowHandle::AndroidNdk(handle);
+        }
+
+        #[cfg(any(
+            target_os = "linux",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "netbsd",
+            target_os = "openbsd",
+        ))]
+        {
+            #[cfg(not(feature = "wayland"))]
+            {
+                let mut handle = raw_window_handle::XlibHandle::empty();
+                handle.window = self.0;
+                handle.display = fltk::app::display();
+                return raw_window_handle::RawWindowHandle::Xlib(handle);
+            }
+
+            #[cfg(feature = "wayland")]
+            {
+                let mut handle = raw_window_handle::WaylandHandle::empty();
+                handle.surface = self.0;
+                handle.display = fltk::app::display();
+                return raw_window_handle::RawWindowHandle::Wayland(handle);
+            }
+        }
+    }
+}
