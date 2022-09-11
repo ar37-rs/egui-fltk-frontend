@@ -14,6 +14,7 @@ use frontend::{
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 fn main() {
+    tracing_subscriber::fmt::init();
     let fltk_app = app::App::default();
 
     // Initialize fltk windows with minimal size:

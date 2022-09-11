@@ -76,3 +76,4 @@ required-features = ["fltk-enable-glwindow"]
 [dev-dependencies]
 egui_demo_lib = "0.19"
 smaa = "0.7"
+tracing-subscriber = "0.3"

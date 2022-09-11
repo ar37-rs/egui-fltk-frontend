@@ -4,8 +4,8 @@ use egui::{epaint::Primitive, NumExt, PaintCallbackInfo};
 use fxhash::FxHashMap;
 use std::{borrow::Cow, num::NonZeroU32};
 use type_map::concurrent::TypeMap;
-use wgpu;
 use wgpu::util::DeviceExt as _;
+use wgpu::{self, TextureViewDescriptor};
 
 const EGUI_WGSL: &str = r#"
 // Vertex shader bindings
@@ -89,6 +89,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return in.color * textureSample(r_tex_color, r_tex_sampler, in.tex_coord);
 }
 "#;
+
+const IDX_BUF: &str = "egui_index_buffer";
+const VTX_BUF: &str = "egui_vertex_buffer";
+const UNI_BUF: &str = "egui_uniform_buffer";
 
 /// A callback function that can be used to compose an [`egui::PaintCallback`] for custom WGPU
 /// rendering.
@@ -203,7 +207,7 @@ struct SizedBuffer {
 }
 
 /// Render pass to render a egui based GUI.
-pub struct RenderPass {
+pub struct RenderPass<'a> {
     render_pipeline: wgpu::RenderPipeline,
     index_buffers: Vec<SizedBuffer>,
     vertex_buffers: Vec<SizedBuffer>,
@@ -218,15 +222,18 @@ pub struct RenderPass {
     /// Storage for use by [`egui::PaintCallback`]'s that need to store resources such as render
     /// pipelines that must have the lifetime of the renderpass.
     pub paint_callback_resources: TypeMap,
+    sampler: wgpu::Sampler,
+    texture_size: wgpu::Extent3d,
+    tex_view_desc: TextureViewDescriptor<'a>,
 }
 
-impl RenderPass {
+impl<'a> RenderPass<'a> {
     /// Creates a new render pass to render a egui UI.
     ///
     /// If the format passed is not a *Srgb format, the shader will automatically convert to `sRGB` colors in the shader.
     pub fn new(
         device: &wgpu::Device,
-        output_format: wgpu::TextureFormat,
+        texture_format: wgpu::TextureFormat,
         msaa_samples: u32,
     ) -> Self {
         let shader = wgpu::ShaderModuleDescriptor {
@@ -236,7 +243,7 @@ impl RenderPass {
         let module = device.create_shader_module(shader);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("egui_uniform_buffer"),
+            label: Some(UNI_BUF),
             contents: bytemuck::cast_slice(&[UniformBuffer {
                 screen_size_in_points: [0.0, 0.0],
                 _padding: Default::default(),
@@ -305,11 +312,14 @@ impl RenderPass {
             push_constant_ranges: &[],
         });
 
+        let mut multisample = wgpu::MultisampleState::default();
+        multisample.count = msaa_samples;
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("egui_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                entry_point: if output_format.describe().srgb {
+                entry_point: if texture_format.describe().srgb {
                     "vs_main"
                 } else {
                     "vs_conv_main"
@@ -334,17 +344,13 @@ impl RenderPass {
                 strip_index_format: None,
             },
             depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                alpha_to_coverage_enabled: false,
-                count: msaa_samples,
-                mask: !0,
-            },
+            multisample,
 
             fragment: Some(wgpu::FragmentState {
                 module: &module,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: output_format,
+                    format: texture_format,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::One,
@@ -363,6 +369,19 @@ impl RenderPass {
             multiview: None,
         });
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: None,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let texture_size = wgpu::Extent3d {
+            width: 200,
+            height: 200,
+            depth_or_array_layers: 1,
+        };
+
         Self {
             render_pipeline,
             vertex_buffers: Vec::with_capacity(64),
@@ -373,6 +392,9 @@ impl RenderPass {
             textures: FxHashMap::default(),
             next_user_texture_id: 0,
             paint_callback_resources: TypeMap::default(),
+            sampler,
+            texture_size,
+            tex_view_desc: TextureViewDescriptor::default(),
         }
     }
 
@@ -542,11 +564,8 @@ impl RenderPass {
         let width = image_delta.image.width() as u32;
         let height = image_delta.image.height() as u32;
 
-        let size = wgpu::Extent3d {
-            width,
-            height,
-            depth_or_array_layers: 1,
-        };
+        self.texture_size.width = width;
+        self.texture_size.height = height;
 
         let data_color32 = match &image_delta.image {
             egui::ImageData::Color(image) => {
@@ -566,7 +585,6 @@ impl RenderPass {
                 Cow::Owned(image.srgba_pixels(1.0).collect::<Vec<_>>())
             }
         };
-        let data_bytes: &[u8] = bytemuck::cast_slice(data_color32.as_slice());
 
         let queue_write_data_to_texture = |texture, origin| {
             queue.write_texture(
@@ -576,13 +594,13 @@ impl RenderPass {
                     origin,
                     aspect: wgpu::TextureAspect::All,
                 },
-                data_bytes,
+                bytemuck::cast_slice(data_color32.as_slice()),
                 wgpu::ImageDataLayout {
                     offset: 0,
                     bytes_per_row: NonZeroU32::new(4 * width),
                     rows_per_image: NonZeroU32::new(height),
                 },
-                size,
+                self.texture_size,
             );
         };
 
@@ -605,23 +623,24 @@ impl RenderPass {
             // allocate a new texture
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
-                size,
+                size: self.texture_size,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             });
-            let filter = match image_delta.filter {
-                egui::TextureFilter::Nearest => wgpu::FilterMode::Nearest,
-                egui::TextureFilter::Linear => wgpu::FilterMode::Linear,
-            };
-            let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                label: None,
-                mag_filter: filter,
-                min_filter: filter,
-                ..Default::default()
-            });
+            // for future use.
+            // let filter = match image_delta.filter {
+            //     egui::TextureFilter::Nearest => wgpu::FilterMode::Nearest,
+            //     egui::TextureFilter::Linear => wgpu::FilterMode::Linear,
+            // };
+            // let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            //     label: None,
+            //     mag_filter: filter,
+            //     min_filter: filter,
+            //     ..Default::default()
+            // });
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: &self.texture_bind_group_layout,
@@ -629,12 +648,12 @@ impl RenderPass {
                     wgpu::BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::TextureView(
-                            &texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                            &texture.create_view(&self.tex_view_desc),
                         ),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
                 ],
             });
@@ -770,7 +789,7 @@ impl RenderPass {
                         self.update_buffer(device, queue, &BufferType::Index, mesh_idx, data);
                     } else {
                         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("egui_index_buffer"),
+                            label: Some(IDX_BUF),
                             contents: data,
                             usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                         });
@@ -785,7 +804,7 @@ impl RenderPass {
                         self.update_buffer(device, queue, &BufferType::Vertex, mesh_idx, data);
                     } else {
                         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("egui_vertex_buffer"),
+                            label: Some(VTX_BUF),
                             contents: data,
                             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                         });
@@ -825,17 +844,17 @@ impl RenderPass {
             BufferType::Index => (
                 &mut self.index_buffers[index],
                 wgpu::BufferUsages::INDEX,
-                "egui_index_buffer",
+                IDX_BUF,
             ),
             BufferType::Vertex => (
                 &mut self.vertex_buffers[index],
                 wgpu::BufferUsages::VERTEX,
-                "egui_vertex_buffer",
+                VTX_BUF,
             ),
             BufferType::Uniform => (
                 &mut self.uniform_buffer,
                 wgpu::BufferUsages::UNIFORM,
-                "egui_uniform_buffer",
+                UNI_BUF,
             ),
         };
 
@@ -863,16 +882,10 @@ struct ScissorRect {
 impl ScissorRect {
     fn new(clip_rect: &egui::Rect, pixels_per_point: f32, target_size: [u32; 2]) -> Self {
         // Transform clip rect to physical pixels:
-        let clip_min_x = pixels_per_point * clip_rect.min.x;
-        let clip_min_y = pixels_per_point * clip_rect.min.y;
-        let clip_max_x = pixels_per_point * clip_rect.max.x;
-        let clip_max_y = pixels_per_point * clip_rect.max.y;
-
-        // Round to integer:
-        let clip_min_x = clip_min_x.round() as u32;
-        let clip_min_y = clip_min_y.round() as u32;
-        let clip_max_x = clip_max_x.round() as u32;
-        let clip_max_y = clip_max_y.round() as u32;
+        let clip_min_x = (pixels_per_point * clip_rect.min.x).round() as u32;
+        let clip_min_y = (pixels_per_point * clip_rect.min.y).round() as u32;
+        let clip_max_x = (pixels_per_point * clip_rect.max.x).round() as u32;
+        let clip_max_y = (pixels_per_point * clip_rect.max.y).round() as u32;
 
         // Clamp:
         let clip_min_x = clip_min_x.clamp(0, target_size[0]);

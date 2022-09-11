@@ -45,12 +45,12 @@ impl PPU for fltk::window::Window {
 }
 
 /// Construct the frontend.
-pub fn begin_with<W>(
+pub fn begin_with<'a, W>(
     window: &mut W,
-    render_pass: RenderPass,
+    render_pass: RenderPass<'a>,
     surface: wgpu::Surface,
     surface_config: wgpu::SurfaceConfiguration,
-) -> (Painter, EguiState)
+) -> (Painter<'a>, EguiState)
 where
     W: WindowExt + PPU,
 {
@@ -66,6 +66,9 @@ where
         render_pass,
         surface,
         surface_config,
+        encoder: wgpu::CommandEncoderDescriptor {
+            label: Some("encoder"),
+        },
     };
 
     let state = EguiState {
@@ -88,13 +91,14 @@ where
     (painter, state)
 }
 
-pub struct Painter {
-    pub render_pass: RenderPass,
+pub struct Painter<'a> {
+    pub render_pass: RenderPass<'a>,
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
+    encoder: wgpu::CommandEncoderDescriptor<'a>,
 }
 
-impl Painter {
+impl<'a> Painter<'a> {
     /// Get the calculated WGPU ScreenDescriptor.
     pub fn get_screen_descriptor(
         &mut self,
@@ -145,22 +149,12 @@ impl Painter {
         texture: egui::TexturesDelta,
     ) {
         // Upload all resources for the GPU.
-        let screen_descriptor = {
-            self.surface_config.width = state.physical_width;
-            self.surface_config.height = state.physical_height;
-            self.surface.configure(device, &self.surface_config);
-            ScreenDescriptor {
-                size_in_pixels: [self.surface_config.width, self.surface_config.height],
-                pixels_per_point: state.pixels_per_point(),
-            }
-        };
+        let screen_descriptor = self.get_screen_descriptor(device, state);
 
         // Record all render passes.
         let output_frame = match self.surface.get_current_texture() {
             Ok(frame) => {
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("encoder"),
-                });
+                let mut encoder = device.create_command_encoder(&self.encoder);
 
                 if texture.free.len() > 0 {
                     texture.free.into_iter().for_each(|id| {
@@ -634,11 +628,7 @@ pub trait EguiImageConvertible<I>
 where
     I: ImageExt,
 {
-    fn egui_image(
-        self,
-        debug_name: &str,
-        filter: egui::TextureFilter,
-    ) -> Result<RetainedEguiImage, FltkError>;
+    fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError>;
 }
 
 impl<I> EguiImageConvertible<I> for I
@@ -646,11 +636,7 @@ where
     I: ImageExt,
 {
     /// Return (egui_extras::RetainedEguiImage)
-    fn egui_image(
-        self,
-        debug_name: &str,
-        filter: egui::TextureFilter,
-    ) -> Result<RetainedEguiImage, FltkError> {
+    fn egui_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
         let size = [self.data_w() as _, self.data_h() as _];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
             size,
@@ -660,29 +646,17 @@ where
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(
-            debug_name,
-            color_image,
-            filter,
-        ))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
     }
 }
 
 pub trait EguiSvgConvertible {
-    fn egui_svg_image(
-        self,
-        debug_name: &str,
-        filter: egui::TextureFilter,
-    ) -> Result<RetainedEguiImage, FltkError>;
+    fn egui_svg_image(self, debug_name: &str) -> Result<RetainedEguiImage, FltkError>;
 }
 
 impl EguiSvgConvertible for fltk::image::SvgImage {
     /// Return (egui_extras::RetainedEguiImage)
-    fn egui_svg_image(
-        mut self,
-        debug_name: &str,
-        filter: egui::TextureFilter,
-    ) -> Result<RetainedEguiImage, FltkError> {
+    fn egui_svg_image(mut self, debug_name: &str) -> Result<RetainedEguiImage, FltkError> {
         self.normalize();
         let size = [self.data_w() as usize, self.data_h() as usize];
         let color_image = egui::ColorImage::from_rgba_unmultiplied(
@@ -693,11 +667,7 @@ impl EguiSvgConvertible for fltk::image::SvgImage {
                 .to_rgb_data(),
         );
 
-        Ok(RetainedEguiImage::from_color_image(
-            debug_name,
-            color_image,
-            filter,
-        ))
+        Ok(RetainedEguiImage::from_color_image(debug_name, color_image))
     }
 }
 /// egui::ColorImage Extender.
@@ -739,7 +709,6 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         vec: Vec<u8>,
-        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 
     fn from_u8_slice(
@@ -747,7 +716,6 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         slice: &[u8],
-        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 
     fn from_vec_color32(
@@ -755,7 +723,6 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         vec: Vec<egui::Color32>,
-        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 
     fn from_color32_slice(
@@ -763,21 +730,14 @@ pub trait TextureHandleExt {
         debug_name: &str,
         size: [usize; 2],
         slice: &[egui::Color32],
-        filter: egui::TextureFilter,
     ) -> egui::TextureHandle;
 }
 
 impl TextureHandleExt for egui::TextureHandle {
-    fn from_vec_u8(
-        ctx: &egui::Context,
-        debug_name: &str,
-        size: [usize; 2],
-        vec: Vec<u8>,
-        filter: egui::TextureFilter,
-    ) -> Self {
+    fn from_vec_u8(ctx: &egui::Context, debug_name: &str, size: [usize; 2], vec: Vec<u8>) -> Self {
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &vec);
         drop(vec);
-        ctx.load_texture(debug_name, color_image, filter)
+        ctx.load_texture(debug_name, color_image, egui::TextureFilter::Linear)
     }
 
     fn from_u8_slice(
@@ -785,10 +745,9 @@ impl TextureHandleExt for egui::TextureHandle {
         debug_name: &str,
         size: [usize; 2],
         slice: &[u8],
-        filter: egui::TextureFilter,
     ) -> Self {
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, slice);
-        ctx.load_texture(debug_name, color_image, filter)
+        ctx.load_texture(debug_name, color_image, egui::TextureFilter::Linear)
     }
 
     fn from_vec_color32(
@@ -796,7 +755,6 @@ impl TextureHandleExt for egui::TextureHandle {
         debug_name: &str,
         size: [usize; 2],
         vec: Vec<egui::Color32>,
-        filter: egui::TextureFilter,
     ) -> Self {
         let mut pixels: Vec<u8> = Vec::with_capacity(vec.len() * 4);
         vec.into_iter().for_each(|x| {
@@ -806,7 +764,7 @@ impl TextureHandleExt for egui::TextureHandle {
             pixels.push(x[3]);
         });
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-        ctx.load_texture(debug_name, color_image, filter)
+        ctx.load_texture(debug_name, color_image, egui::TextureFilter::Linear)
     }
 
     fn from_color32_slice(
@@ -814,7 +772,6 @@ impl TextureHandleExt for egui::TextureHandle {
         debug_name: &str,
         size: [usize; 2],
         slice: &[egui::Color32],
-        filter: egui::TextureFilter,
     ) -> Self {
         let mut pixels: Vec<u8> = Vec::with_capacity(slice.len() * 4);
         slice.into_iter().for_each(|x| {
@@ -824,7 +781,7 @@ impl TextureHandleExt for egui::TextureHandle {
             pixels.push(x[3]);
         });
         let color_image = egui::ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-        ctx.load_texture(debug_name, color_image, filter)
+        ctx.load_texture(debug_name, color_image, egui::TextureFilter::Linear)
     }
 }
 

@@ -60,11 +60,13 @@ fn main() {
 
     // Prepare back and front.
     let render_pass = RenderPass::new(&device, texture_format, 1);
-    let (mut painter, mut state) =
+    let (mut painter, state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
-    // Set visual scale if needed, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
-    state.set_visual_scale(1.5);
+    // // Set visual scale if needed, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
+    // // (might cause blurry image if the image not scaled properly)
+    // let mut state = state;
+    // state.set_visual_scale(1.5);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -99,17 +101,13 @@ fn main() {
 
     // egui image from fltk svg
     let fltk_svg_image = SvgImage::load("examples/resources/fingerprint.svg").unwrap();
-    let retained_egui_svg_image = RetainedEguiImage::from_fltk_svg_image(
-        "fingerprint.svg",
-        fltk_svg_image,
-        egui::TextureFilter::Linear,
-    )
-    .unwrap();
+    let retained_egui_svg_image =
+        RetainedEguiImage::from_fltk_svg_image("fingerprint.svg", fltk_svg_image).unwrap();
 
     // fltk image to egui image
     let retained_egui_image = JpegImage::load("examples/resources/nature.jpg")
         .unwrap()
-        .egui_image("nature.jpg", egui::TextureFilter::Linear)
+        .egui_image("nature.jpg")
         .unwrap();
 
     // Use Timer for auto repaint if the app is idle.
