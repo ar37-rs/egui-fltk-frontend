@@ -16,8 +16,6 @@ pub use wgpu;
 mod clipboard;
 mod egui_image;
 use clipboard::Clipboard;
-
-#[cfg(feature = "fltk-enable-glwindow")]
 use fltk::window::GlWindow;
 
 /// Pixel per unit trait helper.
@@ -25,7 +23,6 @@ pub trait PPU {
     fn pixels_per_unit(&self) -> f32;
 }
 
-#[cfg(feature = "fltk-enable-glwindow")]
 impl PPU for GlWindow {
     fn pixels_per_unit(&self) -> f32 {
         self.pixels_per_unit()
@@ -798,7 +795,6 @@ impl RWHandleExt for fltk::window::Window {
     }
 }
 
-#[cfg(feature = "fltk-enable-glwindow")]
 impl RWHandleExt for fltk::window::GlWindow {
     fn use_compat(&self) -> RwhCompat {
         RwhCompat(self.raw_handle())

@@ -5,7 +5,7 @@ use egui_fltk_frontend::{
     egui,
     fltk::{
         app,
-        enums::{self, Event},
+        enums::Event,
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
@@ -24,7 +24,6 @@ fn main() {
     let mut window = window::GlWindow::default()
         .with_size(960, 540)
         .center_screen();
-    window.set_mode(enums::Mode::Opengl3);
     window.set_label("SMAA Demo Window");
     window.make_resizable(true);
     window.end();
@@ -33,6 +32,8 @@ fn main() {
 
     // SMAA support on vulkan and gl backends only.
     let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+    // let surface = unsafe { instance.create_surface(&window) };
+    // window.use_compat() for raw-window-handle 4.x compatible
     let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).

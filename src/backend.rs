@@ -93,6 +93,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 const IDX_BUF: &str = "egui_index_buffer";
 const VTX_BUF: &str = "egui_vertex_buffer";
 const UNI_BUF: &str = "egui_uniform_buffer";
+const WG_RPAS: &str = "wgpu render pass";
+const GRP_LAB: &str = "egui_pass";
 
 /// A callback function that can be used to compose an [`egui::PaintCallback`] for custom WGPU
 /// rendering.
@@ -423,9 +425,9 @@ impl<'a> RenderPass<'a> {
                 },
             })],
             depth_stencil_attachment: None,
-            label: Some("egui main render pass"),
+            label: Some(WG_RPAS),
         });
-        rpass.push_debug_group("egui_pass");
+        rpass.push_debug_group(GRP_LAB);
 
         self.execute_with_renderpass(&mut rpass, paint_jobs, screen_descriptor);
 
@@ -630,17 +632,7 @@ impl<'a> RenderPass<'a> {
                 format: wgpu::TextureFormat::Rgba8UnormSrgb,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             });
-            // for future use.
-            // let filter = match image_delta.filter {
-            //     egui::TextureFilter::Nearest => wgpu::FilterMode::Nearest,
-            //     egui::TextureFilter::Linear => wgpu::FilterMode::Linear,
-            // };
-            // let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            //     label: None,
-            //     mag_filter: filter,
-            //     min_filter: filter,
-            //     ..Default::default()
-            // });
+
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
                 layout: &self.texture_bind_group_layout,
@@ -657,6 +649,7 @@ impl<'a> RenderPass<'a> {
                     },
                 ],
             });
+
             let origin = wgpu::Origin3d::ZERO;
             queue_write_data_to_texture(&texture, origin);
             self.textures.insert(id, (Some(texture), bind_group));

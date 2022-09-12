@@ -1,6 +1,6 @@
 [package]
 name = "main_example"
-version = "0.21.0"
+version = "0.22.0"
 edition = "2021"
 rust-version = "1.61"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
@@ -11,9 +11,5 @@ publish = false
 resolver = "2"
 
 [dependencies]
-# internal use case
-# egui-fltk-frontend = { version = "0.21", path = "../../../egui-fltk-frontend",  features = ["fltk-enable-glwindow", "fltk-bundled"] }
-
-# enable the "fltk-enable-glwindow" features for more windowing compatibility.
-egui-fltk-frontend = { version = "0.21",  features = ["fltk-enable-glwindow"] }
-egui_demo_lib = "0.19"
+egui-fltk-frontend = "0.22.0"
+egui_demo_lib = "0.19.0"

@@ -1,16 +1,13 @@
-// Enable the "fltk-enable-glwindow" features for more windowing compatibility.
-
 use egui_fltk_frontend as frontend;
 use frontend::{
     egui,
     fltk::{
         app,
-        enums::{self, Event},
+        enums::Event,
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
-    pollster, wgpu, RenderPass, Timer,
-    RWHandleExt
+    pollster, wgpu, RWHandleExt, RenderPass, Timer,
 };
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
@@ -21,7 +18,6 @@ fn main() {
     let mut window = window::GlWindow::default()
         .with_size(800, 600)
         .center_screen();
-    window.set_mode(enums::Mode::Opengl3);
     window.set_label("Demo Window");
     window.make_resizable(true);
     window.end();
@@ -30,6 +26,8 @@ fn main() {
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    // let surface = unsafe { instance.create_surface(&window) };
+    // window.use_compat() for raw-window-handle 4.x compatible
     let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).

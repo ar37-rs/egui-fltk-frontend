@@ -1,13 +1,13 @@
 # Egui FLTK Frontend
 
 [![Crates.io](https://img.shields.io/crates/v/egui-fltk-frontend.svg)](https://crates.io/crates/egui-fltk-frontend)
-![minimum rustc 1.60.0](https://img.shields.io/badge/rustc-1.61.0-blue.svg)
+![minimum rustc 1.61.0](https://img.shields.io/badge/rustc-1.61.0-blue.svg)
 [![Documentation](https://docs.rs/egui-fltk-frontend/badge.svg)](https://docs.rs/egui-fltk-frontend)
 [![CI](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml/badge.svg)](https://github.com/Ar37-rs/egui-fltk-frontend/actions/workflows/ci.yml)
 
 [FLTK](https://github.com/fltk-rs/fltk-rs) frontend for [egui](https://github.com/emilk/egui) [WGPU](https://github.com/gfx-rs/wgpu).
 
-## On linux Debian/Ubuntu based distros, install latest build tools (if not installed)
+## On linux Debian/Ubuntu based distros, install latest build tools:
 
 ```
 sudo apt-get update && sudo apt-get install build-essential cmake ninja-build
@@ -27,11 +27,9 @@ sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev lib
 
 ## Usage
 
-On pure wayland only desktop enable-features:
-
 ```toml
 [dependencies]
-egui-fltk-frontend = { version = "0.21", features = ["wayland"] }
+egui-fltk-frontend = "0.22"
 ```
 
 Note:
@@ -43,9 +41,9 @@ Running example *.rs files:
 
 ```
 cargo r --example image
-cargo r --example main --features="fltk-enable-glwindow"
-cargo r --example smaa --features="fltk-enable-glwindow"
-cargo r --example custom3d --features="fltk-enable-glwindow"
+cargo r --example main
+cargo r --example smaa
+cargo r --example custom3d
 ```
 
 or [click here](https://github.com/Ar37-rs/egui-fltk-frontend/tree/main/examples) on how to use it inside Cargo.toml

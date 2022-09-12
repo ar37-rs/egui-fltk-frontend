@@ -1,6 +1,6 @@
 [package]
 name = "egui-fltk-frontend"
-version = "0.21.0"
+version = "0.22.0"
 edition = "2021"
 rust-version = "1.61.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
@@ -16,32 +16,32 @@ exclude = ["screenshot/"]
 # build = "build.rs"
 
 [dependencies]
-bytemuck = "1"
-egui = { version = "0.19", features = ["bytemuck"] }
+bytemuck = "1.0.0"
+egui = { version = "0.19.0", features = ["bytemuck"] }
 # internal use case only
-# fltk = { version = "1.3", features = ["raw-window-handle", "fltk-bundled", "enable-glwindow"] }
-fltk = { version = ">=1.3.14,<2.0.0", features = ["raw-window-handle"] }
-raw-window-handle = "0.4"
-pollster = "0.2"
+# fltk = { version = "1.3.15", features = ["fltk-bundled", "raw-window-handle"] }
+fltk = { version = ">=1.3.15,<2.0.0", features = ["raw-window-handle"] }
+raw-window-handle = "0.4.3"
+pollster = "0.2.0"
 wgpu = { version = "0.13" }
-fxhash = "0.2"
-type-map = "0.5"
+fxhash = "0.2.0"
+type-map = "0.5.0"
 
 [target."cfg(windows)".dependencies.arboard]
-version = "2"
+version = "2.0.0"
 
 [target."cfg(all(unix, not(any(target_os=\"linux\", target_os=\"freebsd\"))))".dependencies.arboard]
-version = "2"
+version = "2.0.0"
 
 [target."cfg(all(unix, any(target_os=\"linux\", target_os=\"freebsd\")))".dependencies.arboard]
-version = "2"
+version = "2.0.0"
 default-features = false
 
 [features]
-default = []
+default = ["enable-glwindow"]
 debug = []
 wayland = ["fltk/use-wayland"]
-fltk-enable-glwindow = ["fltk/enable-glwindow"]
+enable-glwindow = ["fltk/enable-glwindow"]
 fltk-bundled = ["fltk/fltk-bundled"]
 fltk-shared = ["fltk/fltk-shared"]
 fltk-no-pango = ["fltk/no-pango"]
@@ -59,21 +59,17 @@ wgpu-trace = ["wgpu/trace"]
 wgpu-vulkan-portability = ["wgpu/vulkan-portability"]
 
 [[example]]
-name = "image"
-
-[[example]]
 name = "main"
-required-features = ["fltk-enable-glwindow"]
 
 [[example]]
 name = "custom3d"
-required-features = ["fltk-enable-glwindow"]
 
 [[example]]
 name = "smaa"
-required-features = ["fltk-enable-glwindow"]
+
+[[example]]
+name = "image"
 
 [dev-dependencies]
-egui_demo_lib = "0.19"
-smaa = "0.7"
-tracing-subscriber = "0.3"
+egui_demo_lib = "0.19.0"
+smaa = "0.7.0"

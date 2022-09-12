@@ -16,7 +16,7 @@ fn main() {
     let fltk_app = app::App::default();
 
     // Initialize fltk windows with minimal size:
-    let mut window = window::Window::default()
+    let mut window = window::GlWindow::default()
         .with_size(1000, 720)
         .center_screen();
     window.set_label("Image Demo Window");
@@ -27,6 +27,8 @@ fn main() {
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    // let surface = unsafe { instance.create_surface(&window) };
+    // window.use_compat() for raw-window-handle 4.x compatible
     let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
@@ -96,16 +98,16 @@ fn main() {
         }
     });
 
-    let egui_ctx = egui::Context::default();
+    let egui_ctx = Rc::new(egui::Context::default());
     let start_time = Instant::now();
 
     // egui image from fltk svg
-    let fltk_svg_image = SvgImage::load("examples/resources/fingerprint.svg").unwrap();
+    let fltk_svg_image = SvgImage::from_data(include_str!("resources/fingerprint.svg")).unwrap();
     let retained_egui_svg_image =
         RetainedEguiImage::from_fltk_svg_image("fingerprint.svg", fltk_svg_image).unwrap();
 
     // fltk image to egui image
-    let retained_egui_image = JpegImage::load("examples/resources/nature.jpg")
+    let retained_egui_image = JpegImage::from_data(include_bytes!("resources/nature.jpg"))
         .unwrap()
         .egui_image("nature.jpg")
         .unwrap();
@@ -116,13 +118,10 @@ fn main() {
     let mut quit = false;
 
     while fltk_app.wait() {
-        // Draw the image demo application.
+        let mut state = state.borrow_mut();
+        state.start_time(start_time.elapsed().as_secs_f64());
 
-        state
-            .borrow_mut()
-            .start_time(start_time.elapsed().as_secs_f64());
-
-        let app_output = egui_ctx.run(state.borrow_mut().take_input(), |ctx| {
+        let app_output = egui_ctx.run(state.take_input(), |ctx| {
             egui::CentralPanel::default().show(&ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
@@ -142,25 +141,25 @@ fn main() {
             });
         });
 
-        let window_resized = state.borrow_mut().window_resized();
+        let window_resized = state.window_resized();
 
         // Make sure to put timer.elapsed() on the last order.
         if app_output.repaint_after.is_zero()
             || window_resized
-            || state.borrow().mouse_btn_pressed()
+            || state.mouse_btn_pressed()
             || timer.elapsed()
         {
-            state
-                .borrow_mut()
-                .fuse_output(&mut window, app_output.platform_output);
+            state.fuse_output(&mut window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &state.borrow(), clipped_primitive, texture);
+            painter.paint_jobs(&device, &queue, &mut state, clipped_primitive, texture);
+            window.redraw();
+            window.flush();
             app::awake();
         }
 
         if quit {
-            break;
+            app::quit();
         }
     }
 }

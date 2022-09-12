@@ -3,7 +3,7 @@ use frontend::{
     egui,
     fltk::{
         app,
-        enums::{self, Event},
+        enums::Event,
         prelude::{GroupExt, WidgetBase, WidgetExt, WindowExt},
         window,
     },
@@ -21,7 +21,6 @@ fn main() {
     let mut window = window::GlWindow::default()
         .with_size(800, 600)
         .center_screen();
-    window.set_mode(enums::Mode::Opengl3);
     window.set_label("Custom3D Demo Window");
     window.make_resizable(true);
     window.end();
@@ -30,6 +29,8 @@ fn main() {
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    // let surface = unsafe { instance.create_surface(&window) };
+    // window.use_compat() for raw-window-handle 4.x compatible
     let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
