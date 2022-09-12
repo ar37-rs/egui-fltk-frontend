@@ -29,7 +29,7 @@ sudo apt-get install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev lib
 
 ```toml
 [dependencies]
-egui-fltk-frontend = "0.22"
+egui-fltk-frontend = "0.22.1"
 ```
 
 Note:
