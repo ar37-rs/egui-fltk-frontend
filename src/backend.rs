@@ -1,6 +1,6 @@
 // source: https://github.com/emilk/egui/blob/master/crates/egui-wgpu/src/renderer.rs modified for FLTK
 
-use egui::{epaint::Primitive, NumExt, PaintCallbackInfo};
+use egui::{epaint::Primitive, PaintCallbackInfo};
 use fxhash::FxHashMap;
 use std::{borrow::Cow, num::NonZeroU32};
 use type_map::concurrent::TypeMap;
