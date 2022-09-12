@@ -98,7 +98,7 @@ fn main() {
         }
     });
 
-    let egui_ctx = Rc::new(egui::Context::default());
+    let egui_ctx = egui::Context::default();
     let start_time = Instant::now();
 
     // egui image from fltk svg
