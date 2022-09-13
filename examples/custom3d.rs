@@ -103,8 +103,7 @@ fn main() {
 
     let mut custom3d = Custom3d::new(&device, &mut painter).unwrap();
 
-    while fltk_app.wait() {
-        // Draw custom3d demo application.
+    window.draw(move |window| {
         let mut state = state.borrow_mut();
         state.start_time(start_time.elapsed().as_secs_f64());
 
@@ -137,12 +136,16 @@ fn main() {
             || state.mouse_btn_pressed()
             || timer.elapsed()
         {
-            state.fuse_output(&mut window, app_output.platform_output);
+            state.fuse_output(window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &state, clipped_primitive, texture);
+            painter.paint_jobs(&device, &queue, &state.screen_descriptor, clipped_primitive, texture);
             app::awake();
         }
+    });
+
+    while fltk_app.wait() {
+        window.flush();
     }
 }
 

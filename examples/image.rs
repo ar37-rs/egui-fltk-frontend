@@ -1,3 +1,4 @@
+use egui::introspection;
 use egui_fltk_frontend as frontend;
 use egui_fltk_frontend::{
     egui::{self, Label},
@@ -117,7 +118,7 @@ fn main() {
 
     let mut quit = false;
 
-    while fltk_app.wait() {
+    window.draw(move |window| {
         let mut state = state.borrow_mut();
         state.start_time(start_time.elapsed().as_secs_f64());
 
@@ -149,17 +150,30 @@ fn main() {
             || state.mouse_btn_pressed()
             || timer.elapsed()
         {
-            state.fuse_output(&mut window, app_output.platform_output);
+            state.fuse_output(window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &mut state, clipped_primitive, texture);
-            window.redraw();
-            window.flush();
+            painter.paint_jobs(
+                &device,
+                &queue,
+                &state.screen_descriptor,
+                clipped_primitive,
+                texture,
+            );
             app::awake();
         }
 
         if quit {
             app::quit();
         }
+    });
+
+    let mut init = true;
+    while fltk_app.wait() {
+        if init {
+            fltk_app.redraw();
+            init = false;
+        }
+        window.flush();
     }
 }

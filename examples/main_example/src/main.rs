@@ -25,14 +25,22 @@ fn main() {
     window.make_current();
 
     // wgpu::Backends::PRIMARY can be changed accordingly, .e.g: (wgpu::Backends::VULKAN, wgpu::Backends::GL .etc)
+    #[cfg(target_os = "windows")]
+    let instance = wgpu::Instance::new(wgpu::Backends::DX12);
+
+    #[cfg(target_os = "linux")]
     let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+
+    #[cfg(target_os = "macos")]
+    let instance = wgpu::Instance::new(wgpu::Backends::METAL);
+
     // let surface = unsafe { instance.create_surface(&window) };
     // window.use_compat() for raw-window-handle 4.x compatible
     let surface = unsafe { instance.create_surface(&window.use_compat()) };
 
     // WGPU 0.11+ support force fallback (if HW implementation not supported), set it to true or false (optional).
     let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::HighPerformance,
+        power_preference: wgpu::PowerPreference::LowPower,
         compatible_surface: Some(&surface),
         force_fallback_adapter: false,
     }))
@@ -41,7 +49,7 @@ fn main() {
     let (device, queue) = pollster::block_on(adapter.request_device(
         &wgpu::DeviceDescriptor {
             features: wgpu::Features::default(),
-            limits: wgpu::Limits::default(),
+            limits: wgpu::Limits::downlevel_webgl2_defaults(),
             label: None,
         },
         None,
@@ -63,14 +71,11 @@ fn main() {
     let render_pass = RenderPass::new(&device, texture_format, 1);
     let (mut painter, state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
-
-    // Create egui state
     let state = Rc::new(RefCell::new(state));
 
-    // Handle window events
     window.handle({
         let state = state.clone();
-        move |win, ev| match ev {
+        move |win, event| match event {
             Event::Push
             | Event::Released
             | Event::KeyDown
@@ -82,7 +87,7 @@ fn main() {
             | Event::Focus => {
                 // Using "if let ..." for safety.
                 if let Ok(mut state) = state.try_borrow_mut() {
-                    state.fuse_input(win, ev);
+                    state.fuse_input(win, event);
                     true
                 } else {
                     false
@@ -100,11 +105,11 @@ fn main() {
     // Use Timer for auto repaint if the app is idle.
     let mut timer = Timer::new(1);
 
-    while fltk_app.wait() {
-        // Draw the demo application.
+    window.draw(move |window| {
         let mut state = state.borrow_mut();
         state.start_time(start_time.elapsed().as_secs_f64());
 
+        // Draw the demo application.
         let app_output = egui_ctx.run(state.take_input(), |ctx| {
             demo_app.ui(ctx);
         });
@@ -117,11 +122,21 @@ fn main() {
             || state.mouse_btn_pressed()
             || timer.elapsed()
         {
-            state.fuse_output(&mut window, app_output.platform_output);
+            state.fuse_output(window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
-            painter.paint_jobs(&device, &queue, &state, clipped_primitive, texture);
+            painter.paint_jobs(
+                &device,
+                &queue,
+                &state.screen_descriptor,
+                clipped_primitive,
+                texture,
+            );
             app::awake();
         }
+    });
+
+    while fltk_app.wait() {
+        window.flush();
     }
 }

@@ -13,7 +13,6 @@ use egui_fltk_frontend::{
 };
 
 use std::borrow::Cow;
-use std::iter;
 use std::{cell::RefCell, rc::Rc, time::Instant};
 use wgpu::{ColorTargetState, ColorWrites};
 
@@ -31,7 +30,7 @@ fn main() {
     window.make_current();
 
     // SMAA support on vulkan and gl backends only.
-    let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
     // let surface = unsafe { instance.create_surface(&window) };
     // window.use_compat() for raw-window-handle 4.x compatible
     let surface = unsafe { instance.create_surface(&window.use_compat()) };
@@ -67,11 +66,11 @@ fn main() {
 
     // Prepare back and front.
     let render_pass = RenderPass::new(&device, texture_format, 1);
-    let (mut painter, mut state) =
+    let (mut painter, state) =
         frontend::begin_with(&mut window, render_pass, surface, surface_config);
 
     // Set visual scale if needed, e.g: 0.8, 1.5, 2.0 .etc (default is 1.0)
-    state.set_visual_scale(1.25);
+    // state.set_visual_scale(1.25);
 
     // Create egui state
     let state = Rc::new(RefCell::new(state));
@@ -154,14 +153,11 @@ fn main() {
 
     let mut disable_smaa = true;
 
-    while fltk_app.wait() {
-        // Draw the image demo application.
+    window.draw(move |window| {
+        let mut state = state.borrow_mut();
+        state.start_time(start_time.elapsed().as_secs_f64());
 
-        state
-            .borrow_mut()
-            .start_time(start_time.elapsed().as_secs_f64());
-
-        let app_output = egui_ctx.run(state.borrow_mut().take_input(), |ctx| {
+        let app_output = egui_ctx.run(state.take_input(), |ctx| {
             egui::Window::new("Config").show(&ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([true, true])
@@ -208,24 +204,29 @@ fn main() {
             });
         });
 
-        let window_resized = state.borrow_mut().window_resized();
+        let window_resized = state.window_resized();
 
         // Make sure to put timer.elapsed() on the last order.
         if app_output.repaint_after.is_zero()
             || window_resized
-            || state.borrow().mouse_btn_pressed()
+            || state.mouse_btn_pressed()
             || timer.elapsed()
         {
-            state
-                .borrow_mut()
-                .fuse_output(&mut window, app_output.platform_output);
+            state.fuse_output(window, app_output.platform_output);
             let clipped_primitive = egui_ctx.tessellate(app_output.shapes);
             let texture = app_output.textures_delta;
 
-            let state = state.borrow();
-
             // Get calculated ScreenDescriptor
-            let screen_descriptor = painter.get_screen_descriptor(&device, &state);
+            let screen_descriptor = &state.screen_descriptor;
+
+            // Resize surface according to window screen_descriptor
+            if window_resized {
+                let size = screen_descriptor.size_in_pixels;
+                painter.surface_config.width = size[0];
+                painter.surface_config.height = size[1];
+                painter.surface.configure(&device, &painter.surface_config);
+                smaa_target.resize(&device, size[0], size[1]);
+            }
 
             // Record all render passes.
             match painter.surface.get_current_texture() {
@@ -238,11 +239,7 @@ fn main() {
                     let view = frame
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default());
-                    if window_resized {
-                        smaa_target.resize(&device, window.width() as _, window.height() as _);
-                    }
                     let smaa_view = smaa_target.start_frame(&device, &queue, &view);
-
                     {
                         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                             label: None,
@@ -266,7 +263,7 @@ fn main() {
                             &mut rpass,
                             &device,
                             &queue,
-                            &screen_descriptor,
+                            screen_descriptor,
                             clipped_primitive,
                             texture,
                         );
@@ -274,7 +271,7 @@ fn main() {
 
                     // Submit command buffer
                     let cm_buffer = encoder.finish();
-                    queue.submit(iter::once(cm_buffer));
+                    queue.submit(Some(cm_buffer));
                     smaa_view.resolve();
                     frame.present();
                 }
@@ -284,7 +281,16 @@ fn main() {
         }
 
         if quit {
-            break;
+            app::quit();
         }
+    });
+
+    let mut init = true;
+    while fltk_app.wait() {
+        if init {
+            fltk_app.redraw();
+            init = false;
+        }
+        window.flush();
     }
 }

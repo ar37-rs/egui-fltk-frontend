@@ -8,34 +8,27 @@ use fltk::{
     app,
     enums::{self, Cursor},
     prelude::{FltkError, ImageExt, WindowExt},
-    window::SingleWindow,
 };
 pub use pollster;
-use std::{iter, time::Instant};
+use std::time::Instant;
 pub use wgpu;
 mod clipboard;
 mod egui_image;
 use clipboard::Clipboard;
-use fltk::window::GlWindow;
 
 /// Pixel per unit trait helper.
 pub trait PPU {
     fn pixels_per_unit(&self) -> f32;
 }
 
-impl PPU for GlWindow {
-    fn pixels_per_unit(&self) -> f32 {
-        self.pixels_per_unit()
-    }
-}
-
-impl PPU for SingleWindow {
-    fn pixels_per_unit(&self) -> f32 {
-        self.pixels_per_unit()
-    }
-}
-
 impl PPU for fltk::window::Window {
+    fn pixels_per_unit(&self) -> f32 {
+        self.pixels_per_unit()
+    }
+}
+
+#[cfg(feature = "enable-glwindow")]
+impl PPU for fltk::window::GlWindow {
     fn pixels_per_unit(&self) -> f32 {
         self.pixels_per_unit()
     }
@@ -77,13 +70,14 @@ where
             pixels_per_point: Some(ppu),
             ..Default::default()
         },
-        physical_width: x as _,
-        physical_height: y as _,
-        _pixels_per_point: ppu,
         clipboard: clipboard::Clipboard::default(),
         _mouse_btn_pressed: false,
         scroll_factor: 12.0,
         zoom_factor: 8.0,
+        screen_descriptor: ScreenDescriptor {
+            size_in_pixels: [x as _, y as _],
+            pixels_per_point: ppu,
+        },
     };
     (painter, state)
 }
@@ -96,21 +90,6 @@ pub struct Painter<'a> {
 }
 
 impl<'a> Painter<'a> {
-    /// Get the calculated WGPU ScreenDescriptor.
-    pub fn get_screen_descriptor(
-        &mut self,
-        device: &wgpu::Device,
-        state: &EguiState,
-    ) -> ScreenDescriptor {
-        self.surface_config.width = state.physical_width;
-        self.surface_config.height = state.physical_height;
-        self.surface.configure(device, &self.surface_config);
-        ScreenDescriptor {
-            size_in_pixels: [self.surface_config.width, self.surface_config.height],
-            pixels_per_point: state.pixels_per_point(),
-        }
-    }
-
     /// Paint with egui renderpass
     pub fn paint_with_rpass<'rpass>(
         &'rpass mut self,
@@ -133,6 +112,7 @@ impl<'a> Painter<'a> {
 
         self.render_pass
             .update_buffers(device, queue, &clipped_primitive, screen_descriptor);
+
         self.render_pass
             .execute_with_renderpass(rpass, clipped_primitive, screen_descriptor);
     }
@@ -141,12 +121,16 @@ impl<'a> Painter<'a> {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        state: &EguiState,
+        screen_descriptor: &ScreenDescriptor,
         clipped_primitive: Vec<egui::ClippedPrimitive>,
         texture: egui::TexturesDelta,
     ) {
-        // Upload all resources for the GPU.
-        let screen_descriptor = self.get_screen_descriptor(device, state);
+        {
+            let size = screen_descriptor.size_in_pixels;
+            self.surface_config.width = size[0];
+            self.surface_config.height = size[1];
+            self.surface.configure(device, &self.surface_config);
+        }
 
         // Record all render passes.
         let output_frame = match self.surface.get_current_texture() {
@@ -167,22 +151,20 @@ impl<'a> Painter<'a> {
                     device,
                     queue,
                     &clipped_primitive,
-                    &screen_descriptor,
+                    screen_descriptor,
                 );
 
                 self.render_pass.execute(
                     &mut encoder,
-                    &frame
-                        .texture
-                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                    &frame.texture.create_view(&self.render_pass.tex_view_desc),
                     clipped_primitive,
-                    &screen_descriptor,
+                    screen_descriptor,
                     Some(wgpu::Color::BLACK),
                 );
 
                 // Submit command buffer
                 let cm_buffer = encoder.finish();
-                queue.submit(iter::once(cm_buffer));
+                queue.submit(Some(cm_buffer));
                 frame
             }
             Err(e) => return eprintln!("Dropped frame with error: {}", e),
@@ -224,22 +206,20 @@ pub struct EguiState {
     pub fuse_cursor: FusedCursor,
     pub pointer_pos: egui::Pos2,
     input: egui::RawInput,
-    pub physical_width: u32,
-    pub physical_height: u32,
-    pub _pixels_per_point: f32,
     pub clipboard: Clipboard,
     /// default value is 12.0
     pub scroll_factor: f32,
     /// default value is 8.0
     pub zoom_factor: f32,
     _mouse_btn_pressed: bool,
+    pub screen_descriptor: ScreenDescriptor,
 }
 
 impl EguiState {
     /// Conveniece method bundling the necessary components for input/event handling
     pub fn fuse_input<W>(&mut self, win: &mut W, event: enums::Event)
     where
-        W: WindowExt,
+        W: WindowExt + PPU,
     {
         input_to_egui(win, event, self);
     }
@@ -274,23 +254,25 @@ impl EguiState {
     pub fn set_visual_scale(&mut self, size: f32) {
         // have to be setted the pixels_per_point of both the inner (input) and the state.
         self.input.pixels_per_point = Some(size);
-        self._pixels_per_point = size;
+        self.screen_descriptor.pixels_per_point = size;
+
+        let size_in_pixels = self.screen_descriptor.size_in_pixels;
 
         // resize rect with physical dimention size.
-        let rect = vec2(self.physical_width as _, self.physical_height as _) / size;
+        let rect = vec2(size_in_pixels[0] as _, size_in_pixels[1] as _) / size;
         self.input.screen_rect = Some(Rect::from_min_size(Default::default(), rect));
     }
 
     pub fn pixels_per_point(&self) -> f32 {
-        self._pixels_per_point
+        self.screen_descriptor.pixels_per_point
     }
 
     pub fn take_input(&mut self) -> egui::RawInput {
         let pixels_per_point = self.input.pixels_per_point;
         let take = self.input.take();
-        self.input.pixels_per_point = pixels_per_point;
+        self.input.pixels_per_point = Some(self.screen_descriptor.pixels_per_point);
         if let Some(ppp) = pixels_per_point {
-            self._pixels_per_point = ppp;
+            self.screen_descriptor.pixels_per_point = ppp;
         }
         take
     }
@@ -304,12 +286,11 @@ impl EguiState {
 /// Handles input/events from FLTK
 pub fn input_to_egui<W>(win: &mut W, event: enums::Event, state: &mut EguiState)
 where
-    W: WindowExt,
+    W: WindowExt + PPU,
 {
     match event {
         enums::Event::Resize => {
-            state.physical_width = win.width() as _;
-            state.physical_height = win.height() as _;
+            state.screen_descriptor.size_in_pixels = [win.width() as _, win.height() as _];
             state.set_visual_scale(state.pixels_per_point());
             state._window_resized = true;
         }
@@ -795,6 +776,7 @@ impl RWHandleExt for fltk::window::Window {
     }
 }
 
+#[cfg(feature = "enable-glwindow")]
 impl RWHandleExt for fltk::window::GlWindow {
     fn use_compat(&self) -> RwhCompat {
         RwhCompat(self.raw_handle())

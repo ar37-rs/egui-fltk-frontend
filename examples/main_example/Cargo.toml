@@ -11,5 +11,5 @@ publish = false
 resolver = "2"
 
 [dependencies]
-egui-fltk-frontend = "0.22.0"
+egui-fltk-frontend = "0.22.1"
 egui_demo_lib = "0.19.0"

@@ -182,7 +182,7 @@ pub struct ScreenDescriptor {
 
 impl ScreenDescriptor {
     /// size in "logical" points
-    fn screen_size_in_points(&self) -> [f32; 2] {
+    pub fn screen_size_in_points(&self) -> [f32; 2] {
         [
             self.size_in_pixels[0] as f32 / self.pixels_per_point,
             self.size_in_pixels[1] as f32 / self.pixels_per_point,
@@ -226,7 +226,7 @@ pub struct RenderPass<'a> {
     pub paint_callback_resources: TypeMap,
     sampler: wgpu::Sampler,
     texture_size: wgpu::Extent3d,
-    tex_view_desc: TextureViewDescriptor<'a>,
+    pub tex_view_desc: TextureViewDescriptor<'a>,
 }
 
 impl<'a> RenderPass<'a> {
@@ -777,19 +777,22 @@ impl<'a> RenderPass<'a> {
         for egui::ClippedPrimitive { primitive, .. } in paint_jobs.iter() {
             match primitive {
                 Primitive::Mesh(mesh) => {
-                    let data: &[u8] = bytemuck::cast_slice(&mesh.indices);
-                    if mesh_idx < self.index_buffers.len() {
-                        self.update_buffer(device, queue, &BufferType::Index, mesh_idx, data);
-                    } else {
-                        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some(IDX_BUF),
-                            contents: data,
-                            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-                        });
-                        self.index_buffers.push(SizedBuffer {
-                            buffer,
-                            size: data.len(),
-                        });
+                    {
+                        let data: &[u8] = bytemuck::cast_slice(&mesh.indices);
+                        if mesh_idx < self.index_buffers.len() {
+                            self.update_buffer(device, queue, &BufferType::Index, mesh_idx, data);
+                        } else {
+                            let buffer =
+                                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some(IDX_BUF),
+                                    contents: data,
+                                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                                });
+                            self.index_buffers.push(SizedBuffer {
+                                buffer,
+                                size: data.len(),
+                            });
+                        }
                     }
 
                     let data: &[u8] = bytemuck::cast_slice(&mesh.vertices);

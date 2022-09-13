@@ -13,7 +13,6 @@ repository = "https://github.com/Ar37-rs/egui-fltk-frontend"
 resolver = "2"
 exclude = ["screenshot/"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-# build = "build.rs"
 
 [dependencies]
 bytemuck = "1.0.0"
@@ -39,7 +38,6 @@ default-features = false
 
 [features]
 default = ["enable-glwindow"]
-debug = []
 wayland = ["fltk/use-wayland"]
 enable-glwindow = ["fltk/enable-glwindow"]
 fltk-bundled = ["fltk/fltk-bundled"]
